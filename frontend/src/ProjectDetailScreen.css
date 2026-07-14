@@ -108,3 +108,42 @@
   color: var(--text-sub);
   margin-left: auto;
 }
+
+.pd-tab-row {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 24px;
+}
+
+.pd-tab-btn {
+  border: none;
+  background: none;
+  padding: 10px 16px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-sub);
+  cursor: pointer;
+  font-family: inherit;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.pd-tab-btn:hover {
+  color: var(--text-main);
+}
+
+.pd-tab-btn.is-active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* embedded 모드로 프로젝트 상세 탭 안에 들어올 때 이중 패딩 방지 */
+.pd-screen > .req-screen,
+.pd-screen > .files-screen,
+.pd-screen > .tc-screen,
+.pd-screen > .bugs-screen,
+.pd-screen > .releases-screen {
+  padding: 0;
+  max-width: none;
+}

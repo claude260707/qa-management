@@ -166,3 +166,21 @@
   background: var(--bg-app);
   color: var(--text-main);
 }
+
+.req-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.req-group-header {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: 8px;
+}
+
+.req-group-count {
+  font-weight: 400;
+  color: var(--text-sub);
+}

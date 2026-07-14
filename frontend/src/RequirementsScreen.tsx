@@ -13,13 +13,13 @@ function formatDateTime(d: string) {
   return d.replace('T', ' ').slice(0, 16);
 }
 
-export default function RequirementsScreen() {
+export default function RequirementsScreen({ embeddedProjectId }: { embeddedProjectId?: number } = {}) {
   const [requirements, setRequirements] = useState<Requirement[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [keyword, setKeyword] = useState('');
-  const [projectFilter, setProjectFilter] = useState<'all' | number>('all');
+  const [projectFilter, setProjectFilter] = useState<'all' | number>(embeddedProjectId ?? 'all');
   const [statusFilter, setStatusFilter] = useState<'all' | RequirementStatus>('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Requirement | null>(null);
@@ -62,6 +62,16 @@ export default function RequirementsScreen() {
     return { total, draft, reviewing, approved, rejected, implemented };
   }, [requirements]);
 
+  const groupedByProject = useMemo(() => {
+    if (projectFilter !== 'all') return null;
+    const map = new Map<number, { projectName: string; items: Requirement[] }>();
+    requirements.forEach((r) => {
+      if (!map.has(r.project_id)) map.set(r.project_id, { projectName: r.project_name, items: [] });
+      map.get(r.project_id)!.items.push(r);
+    });
+    return Array.from(map.entries()).map(([projectId, v]) => ({ projectId, ...v }));
+  }, [requirements, projectFilter]);
+
   async function handleSubmit(input: RequirementInput) {
     if (editing) {
       await requirementsApi.update(editing.id, input);
@@ -82,10 +92,12 @@ export default function RequirementsScreen() {
   return (
     <div className="req-screen">
       <header className="screen-header">
-        <div>
-          <h1>요구사항 관리</h1>
-          <p className="screen-subtitle">프로젝트별 요구사항을 등록하고 우선순위·진행 상태를 추적합니다</p>
-        </div>
+        {!embeddedProjectId && (
+          <div>
+            <h1>요구사항 관리</h1>
+            <p className="screen-subtitle">프로젝트별 요구사항을 등록하고 우선순위·진행 상태를 추적합니다</p>
+          </div>
+        )}
         <button
           className="btn-primary"
           onClick={() => { setEditing(null); setModalOpen(true); }}
@@ -131,12 +143,14 @@ export default function RequirementsScreen() {
           onChange={(e) => setKeyword(e.target.value)}
         />
         <div className="toolbar-filters">
-          <select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value === 'all' ? 'all' : Number(e.target.value))}>
-            <option value="all">전체 프로젝트</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
+          {!embeddedProjectId && (
+            <select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value === 'all' ? 'all' : Number(e.target.value))}>
+              <option value="all">전체 프로젝트</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          )}
           <div className="filter-chips">
             {(['all', 'draft', 'reviewing', 'approved', 'rejected', 'implemented'] as const).map((s) => (
               <button
@@ -168,6 +182,53 @@ export default function RequirementsScreen() {
           <span>새 요구사항을 등록하거나 검색/필터 조건을 변경해보세요.</span>
         </div>
       ) : requirements.length > 0 && (
+        groupedByProject ? (
+          <div className="req-group-list">
+            {groupedByProject.map((group) => (
+              <div className="req-group" key={group.projectId}>
+                <div className="req-group-header">
+                  📁 {group.projectName} <span className="req-group-count">({group.items.length})</span>
+                </div>
+                <div className="req-table-wrap">
+                  <table className="req-table">
+                    <thead>
+                      <tr>
+                        <th className="col-title">제목</th>
+                        <th>분류</th>
+                        <th>우선순위</th>
+                        <th>상태</th>
+                        <th>요청자</th>
+                        <th>작성일</th>
+                        <th>최근 수정</th>
+                        <th className="col-actions"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {group.items.map((r) => (
+                        <tr key={r.id}>
+                          <td className="col-title">
+                            <div className="req-title req-title-clickable" onClick={() => setViewing(r)}>{r.title}</div>
+                            {r.description && <div className="req-desc">{r.description}</div>}
+                          </td>
+                          <td className="mono-cell">{REQ_CATEGORY_LABEL[r.category]}</td>
+                          <td><span className={`priority-pill priority-${r.priority}`}>{REQ_PRIORITY_LABEL[r.priority]}</span></td>
+                          <td><span className={`req-status-pill req-status-${r.status}`}>{REQ_STATUS_LABEL[r.status]}</span></td>
+                          <td>{r.requester || '-'}</td>
+                          <td className="mono-cell">{formatDate(r.created_at)}</td>
+                          <td className="mono-cell">{formatDateTime(r.updated_at)}</td>
+                          <td className="col-actions">
+                            <button onClick={() => { setEditing(r); setModalOpen(true); }} title="수정">✎</button>
+                            <button onClick={() => handleDelete(r)} title="삭제">✕</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
         <div className="req-table-wrap">
           <table className="req-table">
             <thead>
@@ -206,6 +267,7 @@ export default function RequirementsScreen() {
             </tbody>
           </table>
         </div>
+        )
       )}
 
       {modalOpen && (

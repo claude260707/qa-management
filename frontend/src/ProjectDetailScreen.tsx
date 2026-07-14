@@ -2,9 +2,25 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Project, Requirement, Attachment, TestCase, RequirementCoverage, ProjectStatus } from './types';
 import { STATUS_LABEL, REQ_PRIORITY_LABEL, REQ_STATUS_LABEL, TC_STATUS_LABEL } from './types';
 import { projectsApi, requirementsApi, attachmentsApi, testCasesApi } from './api';
+import RequirementsScreen from './RequirementsScreen';
+import FilesScreen from './FilesScreen';
+import TestCasesScreen from './TestCasesScreen';
+import BugsScreen from './BugsScreen';
+import ReleasesScreen from './ReleasesScreen';
 import './ProjectDetailScreen.css';
 
 const PLANNING_STATUSES: ProjectStatus[] = ['planning', 'planning_done', 'planning_revision'];
+
+type DetailTab = 'overview' | 'requirements' | 'files' | 'testcases' | 'bugs' | 'release';
+
+const TABS: { key: DetailTab; label: string }[] = [
+  { key: 'overview', label: '개요' },
+  { key: 'requirements', label: '요구사항' },
+  { key: 'files', label: '기획문서' },
+  { key: 'testcases', label: 'Test Case' },
+  { key: 'bugs', label: 'Bug' },
+  { key: 'release', label: 'Release' },
+];
 
 function formatDate(d: string | null) {
   if (!d) return '-';
@@ -18,6 +34,7 @@ function formatSize(bytes: number) {
 }
 
 export default function ProjectDetailScreen({ projectId, onBack }: { projectId: number; onBack: () => void }) {
+  const [tab, setTab] = useState<DetailTab>('overview');
   const [project, setProject] = useState<Project | null>(null);
   const [requirements, setRequirements] = useState<Requirement[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -28,6 +45,7 @@ export default function ProjectDetailScreen({ projectId, onBack }: { projectId: 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setTab('overview');
     Promise.all([
       projectsApi.get(projectId),
       requirementsApi.list({ project_id: projectId }),
@@ -92,7 +110,25 @@ export default function ProjectDetailScreen({ projectId, onBack }: { projectId: 
         </div>
       </header>
 
-      {isPlanningStage ? (
+      <div className="pd-tab-row">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            className={`pd-tab-btn ${tab === t.key ? 'is-active' : ''}`}
+            onClick={() => setTab(t.key)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'requirements' && <RequirementsScreen embeddedProjectId={projectId} />}
+      {tab === 'files' && <FilesScreen embeddedProjectId={projectId} />}
+      {tab === 'testcases' && <TestCasesScreen embeddedProjectId={projectId} />}
+      {tab === 'bugs' && <BugsScreen embeddedProjectId={projectId} />}
+      {tab === 'release' && <ReleasesScreen embeddedProjectId={projectId} />}
+
+      {tab === 'overview' && (isPlanningStage ? (
         <section className="pd-body">
           <div className="pd-section-title">
             <h2>요구사항 ({requirements.length})</h2>
@@ -252,7 +288,7 @@ export default function ProjectDetailScreen({ projectId, onBack }: { projectId: 
             </div>
           )}
         </section>
-      )}
+      ))}
     </div>
   );
 }

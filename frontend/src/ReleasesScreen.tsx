@@ -10,13 +10,13 @@ function formatDate(d: string | null) {
   return d.slice(0, 10);
 }
 
-export default function ReleasesScreen() {
+export default function ReleasesScreen({ embeddedProjectId }: { embeddedProjectId?: number } = {}) {
   const [releases, setReleases] = useState<Release[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [keyword, setKeyword] = useState('');
-  const [projectFilter, setProjectFilter] = useState<'all' | number>('all');
+  const [projectFilter, setProjectFilter] = useState<'all' | number>(embeddedProjectId ?? 'all');
   const [statusFilter, setStatusFilter] = useState<'all' | ReleaseStatus>('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Release | null>(null);
@@ -58,6 +58,16 @@ export default function ReleasesScreen() {
     return { total, planned, released, rolledBack };
   }, [releases]);
 
+  const groupedByProject = useMemo(() => {
+    if (projectFilter !== 'all') return null;
+    const map = new Map<number, { projectName: string; items: Release[] }>();
+    releases.forEach((r) => {
+      if (!map.has(r.project_id)) map.set(r.project_id, { projectName: r.project_name, items: [] });
+      map.get(r.project_id)!.items.push(r);
+    });
+    return Array.from(map.entries()).map(([projectId, v]) => ({ projectId, ...v }));
+  }, [releases, projectFilter]);
+
   async function handleSubmit(input: ReleaseInput) {
     if (editing) {
       await releasesApi.update(editing.id, input);
@@ -98,13 +108,69 @@ export default function ReleasesScreen() {
     setModalOpen(true);
   }
 
+  function renderReleaseCard(r: Release, hideProjectTag: boolean) {
+    const detail = detailById[r.id];
+    const isExpanded = expandedId === r.id;
+    return (
+      <article className="release-card" key={r.id}>
+        <div className="release-card-top" onClick={() => toggleExpand(r)}>
+          <div className="release-card-main">
+            <span className={`release-status-pill release-status-${r.status}`}>{RELEASE_STATUS_LABEL[r.status]}</span>
+            <h3 className="release-version">{r.version}</h3>
+            {!hideProjectTag && <span className="release-project-tag">📁 {r.project_name}</span>}
+          </div>
+          <div className="release-card-side">
+            <span className="release-date mono">📅 {formatDate(r.release_date)}</span>
+            <span className="release-counts">🐞 {r.bug_count ?? 0} · 📋 {r.requirement_count ?? 0}</span>
+            <span className="expand-arrow">{isExpanded ? '▲' : '▼'}</span>
+          </div>
+        </div>
+
+        {isExpanded && (
+          <div className="release-card-detail">
+            {r.notes && <p className="release-notes">{r.notes}</p>}
+
+            <div className="release-detail-col">
+              <span className="release-detail-label">🐞 이 버전에서 수정된 Bug ({detail?.bugs?.length ?? 0})</span>
+              {detail?.bugs && detail.bugs.length > 0 ? (
+                <ul className="release-detail-list">
+                  {detail.bugs.map((b) => <li key={b.id}>{b.title}</li>)}
+                </ul>
+              ) : (
+                <span className="release-detail-empty">연결된 Bug가 없습니다.</span>
+              )}
+            </div>
+
+            <div className="release-detail-col">
+              <span className="release-detail-label">📋 이 버전에 포함된 요구사항 ({detail?.requirements?.length ?? 0})</span>
+              {detail?.requirements && detail.requirements.length > 0 ? (
+                <ul className="release-detail-list">
+                  {detail.requirements.map((req) => <li key={req.id}>{req.title}</li>)}
+                </ul>
+              ) : (
+                <span className="release-detail-empty">연결된 요구사항이 없습니다.</span>
+              )}
+            </div>
+
+            <div className="release-detail-actions">
+              <button className="btn-ghost-sm" onClick={() => openEdit(r)}>✎ 수정</button>
+              <button className="btn-ghost-sm" onClick={() => handleDelete(r)}>✕ 삭제</button>
+            </div>
+          </div>
+        )}
+      </article>
+    );
+  }
+
   return (
     <div className="releases-screen">
       <header className="screen-header">
-        <div>
-          <h1>Release 관리</h1>
-          <p className="screen-subtitle">버전과 배포일자를 기준으로, 수정된 Bug와 완료된 요구사항을 함께 기록합니다</p>
-        </div>
+        {!embeddedProjectId && (
+          <div>
+            <h1>Release 관리</h1>
+            <p className="screen-subtitle">버전과 배포일자를 기준으로, 수정된 Bug와 완료된 요구사항을 함께 기록합니다</p>
+          </div>
+        )}
         <button
           className="btn-primary"
           onClick={() => { setEditing(null); setModalOpen(true); }}
@@ -142,12 +208,14 @@ export default function ReleasesScreen() {
           onChange={(e) => setKeyword(e.target.value)}
         />
         <div className="toolbar-filters">
-          <select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value === 'all' ? 'all' : Number(e.target.value))}>
-            <option value="all">전체 프로젝트</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
+          {!embeddedProjectId && (
+            <select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value === 'all' ? 'all' : Number(e.target.value))}>
+              <option value="all">전체 프로젝트</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          )}
           <div className="filter-chips">
             {(['all', 'planned', 'released', 'rolled_back'] as const).map((s) => (
               <button
@@ -179,61 +247,24 @@ export default function ReleasesScreen() {
           <span>새 Release를 등록하거나 검색/필터 조건을 변경해보세요.</span>
         </div>
       ) : (
-        <div className="release-list">
-          {releases.map((r) => {
-            const detail = detailById[r.id];
-            const isExpanded = expandedId === r.id;
-            return (
-              <article className="release-card" key={r.id}>
-                <div className="release-card-top" onClick={() => toggleExpand(r)}>
-                  <div className="release-card-main">
-                    <span className={`release-status-pill release-status-${r.status}`}>{RELEASE_STATUS_LABEL[r.status]}</span>
-                    <h3 className="release-version">{r.version}</h3>
-                    <span className="release-project-tag">📁 {r.project_name}</span>
-                  </div>
-                  <div className="release-card-side">
-                    <span className="release-date mono">📅 {formatDate(r.release_date)}</span>
-                    <span className="release-counts">🐞 {r.bug_count ?? 0} · 📋 {r.requirement_count ?? 0}</span>
-                    <span className="expand-arrow">{isExpanded ? '▲' : '▼'}</span>
-                  </div>
+        groupedByProject ? (
+          <div className="release-group-list">
+            {groupedByProject.map((group) => (
+              <div className="release-group" key={group.projectId}>
+                <div className="release-group-header">
+                  📁 {group.projectName} <span className="release-group-count">({group.items.length})</span>
                 </div>
-
-                {isExpanded && (
-                  <div className="release-card-detail">
-                    {r.notes && <p className="release-notes">{r.notes}</p>}
-
-                    <div className="release-detail-col">
-                      <span className="release-detail-label">🐞 이 버전에서 수정된 Bug ({detail?.bugs?.length ?? 0})</span>
-                      {detail?.bugs && detail.bugs.length > 0 ? (
-                        <ul className="release-detail-list">
-                          {detail.bugs.map((b) => <li key={b.id}>{b.title}</li>)}
-                        </ul>
-                      ) : (
-                        <span className="release-detail-empty">연결된 Bug가 없습니다.</span>
-                      )}
-                    </div>
-
-                    <div className="release-detail-col">
-                      <span className="release-detail-label">📋 이 버전에 포함된 요구사항 ({detail?.requirements?.length ?? 0})</span>
-                      {detail?.requirements && detail.requirements.length > 0 ? (
-                        <ul className="release-detail-list">
-                          {detail.requirements.map((req) => <li key={req.id}>{req.title}</li>)}
-                        </ul>
-                      ) : (
-                        <span className="release-detail-empty">연결된 요구사항이 없습니다.</span>
-                      )}
-                    </div>
-
-                    <div className="release-detail-actions">
-                      <button className="btn-ghost-sm" onClick={() => openEdit(r)}>✎ 수정</button>
-                      <button className="btn-ghost-sm" onClick={() => handleDelete(r)}>✕ 삭제</button>
-                    </div>
-                  </div>
-                )}
-              </article>
-            );
-          })}
-        </div>
+                <div className="release-list">
+                  {group.items.map((r) => renderReleaseCard(r, true))}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="release-list">
+            {releases.map((r) => renderReleaseCard(r, false))}
+          </div>
+        )
       )}
 
       {modalOpen && (

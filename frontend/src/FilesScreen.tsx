@@ -28,9 +28,9 @@ function fileTag(item: Attachment) {
 
 type TabKey = 'upload' | 'link';
 
-export default function FilesScreen() {
+export default function FilesScreen({ embeddedProjectId }: { embeddedProjectId?: number } = {}) {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [projectId, setProjectId] = useState<number | null>(null);
+  const [projectId, setProjectId] = useState<number | null>(embeddedProjectId ?? null);
   const [requirements, setRequirements] = useState<Requirement[]>([]);
   const [files, setFiles] = useState<Attachment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,9 +53,9 @@ export default function FilesScreen() {
   useEffect(() => {
     projectsApi.list().then((data) => {
       setProjects(data);
-      if (data.length > 0) setProjectId(data[0].id);
+      if (!embeddedProjectId && data.length > 0) setProjectId(data[0].id);
     }).catch(() => {});
-  }, []);
+  }, [embeddedProjectId]);
 
   useEffect(() => {
     if (!projectId) { setRequirements([]); return; }
@@ -137,24 +137,28 @@ export default function FilesScreen() {
   return (
     <div className="files-screen">
       <header className="screen-header">
-        <div>
-          <h1>기획 문서 첨부</h1>
-          <p className="screen-subtitle">프로젝트별 산출물, 기획서, PPT, 참고 링크 등을 업로드하고 관리합니다</p>
-        </div>
+        {!embeddedProjectId && (
+          <div>
+            <h1>기획 문서 첨부</h1>
+            <p className="screen-subtitle">프로젝트별 산출물, 기획서, PPT, 참고 링크 등을 업로드하고 관리합니다</p>
+          </div>
+        )}
       </header>
 
       <section className="toolbar">
-        <select
-          className="project-select"
-          value={projectId ?? ''}
-          onChange={(e) => setProjectId(Number(e.target.value))}
-          disabled={projects.length === 0}
-        >
-          {projects.length === 0 && <option value="">프로젝트 없음</option>}
-          {projects.map((p) => (
-            <option key={p.id} value={p.id}>{p.name}</option>
-          ))}
-        </select>
+        {!embeddedProjectId && (
+          <select
+            className="project-select"
+            value={projectId ?? ''}
+            onChange={(e) => setProjectId(Number(e.target.value))}
+            disabled={projects.length === 0}
+          >
+            {projects.length === 0 && <option value="">프로젝트 없음</option>}
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        )}
         <div className="files-stat">
           파일 {fileCount}개 · 링크 {linkCount}개 · 총 {formatSize(totalSize)}
         </div>

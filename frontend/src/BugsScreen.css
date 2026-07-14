@@ -112,3 +112,21 @@
   background: var(--rel-released-bg, #E3F6EC);
   color: var(--rel-released, #1E8E5A);
 }
+
+.bug-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.bug-group-header {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: 10px;
+}
+
+.bug-group-count {
+  font-weight: 400;
+  color: var(--text-sub);
+}

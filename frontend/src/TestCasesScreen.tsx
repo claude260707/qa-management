@@ -12,9 +12,9 @@ function formatDate(d: string) {
   return d.slice(0, 10);
 }
 
-export default function TestCasesScreen() {
+export default function TestCasesScreen({ embeddedProjectId }: { embeddedProjectId?: number } = {}) {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [projectId, setProjectId] = useState<number | null>(null);
+  const [projectId, setProjectId] = useState<number | null>(embeddedProjectId ?? null);
   const [requirements, setRequirements] = useState<Requirement[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [coverage, setCoverage] = useState<RequirementCoverage[]>([]);
@@ -184,11 +184,13 @@ export default function TestCasesScreen() {
   return (
     <div className="tc-screen">
       <header className="screen-header">
-        <div>
-          <button className="tc-back-btn" onClick={() => setProjectId(null)}>← 프로젝트 목록</button>
-          <h1>{selectedProject?.name ?? 'Test Case 관리'}</h1>
-          <p className="screen-subtitle">요구사항 기반으로 Test Case를 설계하고, 커버리지 누락 여부를 확인합니다</p>
-        </div>
+        {!embeddedProjectId && (
+          <div>
+            <button className="tc-back-btn" onClick={() => setProjectId(null)}>← 프로젝트 목록</button>
+            <h1>{selectedProject?.name ?? 'Test Case 관리'}</h1>
+            <p className="screen-subtitle">요구사항 기반으로 Test Case를 설계하고, 커버리지 누락 여부를 확인합니다</p>
+          </div>
+        )}
         <div className="tc-header-actions">
           <button className="btn-ghost" onClick={() => setBulkUploadOpen(true)}>📤 엑셀 업로드</button>
           <button
