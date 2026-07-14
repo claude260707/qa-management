@@ -1,6 +1,8 @@
 import type { Project, ProjectInput, Requirement, RequirementInput, Attachment, TestCase, TestCaseInput, TestCaseBulkItem, RequirementCoverage, Bug, BugInput, Release, ReleaseInput } from './types';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
+// VITE_API_URL이 별도로 지정되지 않으면, 지금 이 화면에 접속한 주소(hostname)를 그대로 따라간다.
+// "localhost"로 고정하면 다른 PC에서 접속했을 때 그 PC 자신을 가리키게 되어 API 호출이 실패한다.
+const BASE_URL = import.meta.env.VITE_API_URL || `http://${window.location.hostname}:4000/api`;
 
 async function handle(res: Response) {
   const data = await res.json();
