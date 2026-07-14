@@ -100,6 +100,49 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// POST /api/test-cases/bulk - 엑셀 업로드 등으로 파싱된 여러 TC를 한 번에 저장 (트랜잭션)
+router.post('/bulk', async (req, res) => {
+  const { project_id, items } = req.body;
+  if (!project_id) {
+    return res.status(400).json({ error: '프로젝트를 선택해주세요.' });
+  }
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: '등록할 항목이 없습니다.' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const created = [];
+    for (const item of items) {
+      if (!item.title || !item.title.trim()) continue;
+      const result = await client.query(
+        `INSERT INTO test_cases (project_id, requirement_id, title, precondition, steps, expected_result, priority, status, tester)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'not_run', $8) RETURNING *`,
+        [
+          project_id,
+          item.requirement_id || null,
+          item.title.trim(),
+          item.precondition || null,
+          item.steps || null,
+          item.expected_result || null,
+          item.priority || 'medium',
+          item.tester || null,
+        ]
+      );
+      created.push(result.rows[0]);
+    }
+    await client.query('COMMIT');
+    res.status(201).json({ created_count: created.length, created });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: '일괄 등록에 실패했습니다. 아무 것도 저장되지 않았습니다.' });
+  } finally {
+    client.release();
+  }
+});
+
 // POST /api/test-cases - 생성
 router.post('/', async (req, res) => {
   try {

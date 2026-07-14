@@ -1,0 +1,78 @@
+.bulk-upload-panel {
+  max-width: 720px;
+  width: 92vw;
+}
+
+.bulk-upload-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.bulk-upload-file-label {
+  cursor: pointer;
+}
+
+.bulk-upload-filename {
+  font-size: 12.5px;
+  color: var(--text-sub);
+}
+
+.bulk-upload-summary {
+  font-size: 12.5px;
+  color: var(--text-sub);
+  margin-bottom: 10px;
+}
+
+.bulk-upload-warn {
+  color: var(--status-on_hold, #B5760C);
+  font-weight: 500;
+}
+
+.bulk-upload-table-wrap {
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.bulk-upload-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.bulk-upload-table th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-app);
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+  color: var(--text-sub);
+}
+
+.bulk-upload-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.bulk-row-excluded {
+  opacity: 0.5;
+}
+
+.bulk-match-ok {
+  color: var(--status-completed, #1E8E5A);
+}
+
+.bulk-match-fail {
+  color: var(--status-on_hold, #B5760C);
+}
+
+.bulk-warning-text {
+  color: var(--status-on_hold, #B5760C);
+  font-size: 11.5px;
+}

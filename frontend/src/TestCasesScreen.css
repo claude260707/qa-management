@@ -344,3 +344,9 @@
 .tc-back-btn:hover {
   text-decoration: underline;
 }
+
+.tc-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

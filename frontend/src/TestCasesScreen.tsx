@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Project, Requirement, TestCase, TestCaseInput, TestCaseStatus, RequirementCoverage, Attachment, BugInput } from './types';
+import type { Project, Requirement, TestCase, TestCaseInput, TestCaseBulkItem, TestCaseStatus, RequirementCoverage, Attachment, BugInput } from './types';
 import { REQ_PRIORITY_LABEL, TC_STATUS_LABEL, STATUS_LABEL } from './types';
 import { projectsApi, requirementsApi, testCasesApi, attachmentsApi, bugsApi } from './api';
 import TestCaseModal from './TestCaseModal';
 import RequirementModal from './RequirementModal';
 import BugModal from './BugModal';
+import TestCaseBulkUploadModal from './TestCaseBulkUploadModal';
 import './TestCasesScreen.css';
 
 function formatDate(d: string) {
@@ -30,6 +31,7 @@ export default function TestCasesScreen() {
   const [prefillRequirementId, setPrefillRequirementId] = useState<number | null>(null);
   const [viewingRequirement, setViewingRequirement] = useState<Requirement | null>(null);
   const [bugPrefillTc, setBugPrefillTc] = useState<TestCase | null>(null);
+  const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
 
   useEffect(() => {
     projectsApi.list().then(setProjects).catch(() => {});
@@ -115,6 +117,14 @@ export default function TestCasesScreen() {
     setBugPrefillTc(null);
   }
 
+  async function handleBulkImport(items: TestCaseBulkItem[]) {
+    if (!projectId) return;
+    await testCasesApi.bulkCreate(projectId, items);
+    setBulkUploadOpen(false);
+    await load();
+    await refreshCoverage();
+  }
+
   function downloadAutomationScript(tc: TestCase) {
     if (!tc.automation_script) return;
     const safeName = tc.title
@@ -179,12 +189,15 @@ export default function TestCasesScreen() {
           <h1>{selectedProject?.name ?? 'Test Case 관리'}</h1>
           <p className="screen-subtitle">요구사항 기반으로 Test Case를 설계하고, 커버리지 누락 여부를 확인합니다</p>
         </div>
-        <button
-          className="btn-primary"
-          onClick={() => openCreateForRequirement(null)}
-        >
-          + 새 Test Case
-        </button>
+        <div className="tc-header-actions">
+          <button className="btn-ghost" onClick={() => setBulkUploadOpen(true)}>📤 엑셀 업로드</button>
+          <button
+            className="btn-primary"
+            onClick={() => openCreateForRequirement(null)}
+          >
+            + 새 Test Case
+          </button>
+        </div>
       </header>
 
       {projects.length === 0 ? (
@@ -396,6 +409,14 @@ export default function TestCasesScreen() {
           prefillFromTestCase={bugPrefillTc}
           onClose={() => setBugPrefillTc(null)}
           onSubmit={handleBugSubmit}
+        />
+      )}
+
+      {bulkUploadOpen && (
+        <TestCaseBulkUploadModal
+          requirements={requirements}
+          onClose={() => setBulkUploadOpen(false)}
+          onImport={handleBulkImport}
         />
       )}
     </div>

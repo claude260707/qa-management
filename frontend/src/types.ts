@@ -158,6 +158,16 @@ export interface TestCaseInput {
   automation_script?: string;
 }
 
+export interface TestCaseBulkItem {
+  requirement_id?: number | null;
+  title: string;
+  precondition?: string;
+  steps?: string;
+  expected_result?: string;
+  priority?: TestCasePriority;
+  tester?: string;
+}
+
 export const TC_STATUS_LABEL: Record<TestCaseStatus, string> = {
   not_run: '미실행',
   pass: '통과',

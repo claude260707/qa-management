@@ -1,4 +1,4 @@
-import type { Project, ProjectInput, Requirement, RequirementInput, Attachment, TestCase, TestCaseInput, RequirementCoverage, Bug, BugInput, Release, ReleaseInput } from './types';
+import type { Project, ProjectInput, Requirement, RequirementInput, Attachment, TestCase, TestCaseInput, TestCaseBulkItem, RequirementCoverage, Bug, BugInput, Release, ReleaseInput } from './types';
 
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000/api';
 
@@ -131,6 +131,13 @@ export const testCasesApi = {
 
   remove: (id: number): Promise<{ message: string }> =>
     fetch(`${BASE_URL}/test-cases/${id}`, { method: 'DELETE' }).then(handle),
+
+  bulkCreate: (projectId: number, items: TestCaseBulkItem[]): Promise<{ created_count: number; created: TestCase[] }> =>
+    fetch(`${BASE_URL}/test-cases/bulk`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project_id: projectId, items }),
+    }).then(handle),
 };
 
 export const bugsApi = {
