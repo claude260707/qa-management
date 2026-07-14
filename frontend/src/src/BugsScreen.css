@@ -1,0 +1,114 @@
+.bugs-screen {
+  flex: 1;
+  padding: 32px 40px 60px;
+  max-width: 1180px;
+}
+
+:root {
+  --bug-open: #C0392B;
+  --bug-open-bg: #FBE7E4;
+  --bug-in_progress: #B5760C;
+  --bug-in_progress-bg: #FCF1DD;
+  --bug-fixed: #2F6FED;
+  --bug-fixed-bg: #E8EFFE;
+  --bug-closed: #1E8E5A;
+  --bug-closed-bg: #E3F6EC;
+  --bug-reopened: #7C3AED;
+  --bug-reopened-bg: #F1EBFC;
+}
+
+.bug-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.bug-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+}
+
+.bug-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.bug-card-tags {
+  display: flex;
+  gap: 8px;
+}
+
+.bug-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 10px;
+}
+
+.bug-links {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.bug-link-tag {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--bg-app);
+  color: var(--text-sub);
+}
+
+.bug-field {
+  margin-bottom: 10px;
+}
+
+.bug-field-label {
+  display: block;
+  font-size: 12px;
+  color: var(--text-sub);
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.bug-field p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.bug-meta {
+  display: flex;
+  gap: 20px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+}
+
+.bug-meta .meta-label {
+  color: var(--text-sub);
+  margin-right: 6px;
+}
+
+.bug-status-pill {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+
+.bug-status-open { background: var(--bug-open-bg); color: var(--bug-open); }
+.bug-status-in_progress { background: var(--bug-in_progress-bg); color: var(--bug-in_progress); }
+.bug-status-fixed { background: var(--bug-fixed-bg); color: var(--bug-fixed); }
+.bug-status-closed { background: var(--bug-closed-bg); color: var(--bug-closed); }
+.bug-status-reopened { background: var(--bug-reopened-bg); color: var(--bug-reopened); }
+
+.bug-link-tag.release-tag {
+  background: var(--rel-released-bg, #E3F6EC);
+  color: var(--rel-released, #1E8E5A);
+}

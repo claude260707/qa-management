@@ -1,0 +1,168 @@
+.req-screen {
+  flex: 1;
+  padding: 32px 40px 60px;
+  max-width: 1180px;
+}
+
+:root {
+  --req-draft: #6B7686;
+  --req-draft-bg: #EEF0F3;
+  --req-reviewing: #B5760C;
+  --req-reviewing-bg: #FCF1DD;
+  --req-approved: #2F6FED;
+  --req-approved-bg: #E8EFFE;
+  --req-rejected: #C0392B;
+  --req-rejected-bg: #FBE7E4;
+  --req-implemented: #1E8E5A;
+  --req-implemented-bg: #E3F6EC;
+
+  --pri-low: #6B7686;
+  --pri-low-bg: #EEF0F3;
+  --pri-medium: #2F6FED;
+  --pri-medium-bg: #E8EFFE;
+  --pri-high: #B5760C;
+  --pri-high-bg: #FCF1DD;
+  --pri-critical: #C0392B;
+  --pri-critical-bg: #FBE7E4;
+}
+
+.toolbar-filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.toolbar-filters select {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  background: var(--bg-panel);
+  color: var(--text-main);
+}
+
+.req-table-wrap {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.req-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.req-table thead tr {
+  background: var(--bg-app);
+}
+
+.req-table th {
+  text-align: left;
+  padding: 12px 16px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-sub);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.req-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.req-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.req-table tbody tr:hover {
+  background: #FAFBFC;
+}
+
+.col-title {
+  min-width: 220px;
+}
+
+.req-title {
+  font-weight: 500;
+  margin-bottom: 3px;
+}
+
+.req-title-clickable {
+  cursor: pointer;
+}
+
+.req-title-clickable:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.req-desc {
+  font-size: 12px;
+  color: var(--text-sub);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  max-width: 320px;
+}
+
+.project-tag {
+  font-size: 12px;
+  color: var(--text-sub);
+  background: var(--bg-app);
+  padding: 3px 9px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.mono-cell {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-sub);
+  white-space: nowrap;
+}
+
+.priority-pill, .req-status-pill {
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.priority-low { background: var(--pri-low-bg); color: var(--pri-low); }
+.priority-medium { background: var(--pri-medium-bg); color: var(--pri-medium); }
+.priority-high { background: var(--pri-high-bg); color: var(--pri-high); }
+.priority-critical { background: var(--pri-critical-bg); color: var(--pri-critical); }
+
+.req-status-draft { background: var(--req-draft-bg); color: var(--req-draft); }
+.req-status-reviewing { background: var(--req-reviewing-bg); color: var(--req-reviewing); }
+.req-status-approved { background: var(--req-approved-bg); color: var(--req-approved); }
+.req-status-rejected { background: var(--req-rejected-bg); color: var(--req-rejected); }
+.req-status-implemented { background: var(--req-implemented-bg); color: var(--req-implemented); }
+
+.col-actions {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.col-actions button {
+  background: transparent;
+  border: none;
+  color: var(--text-sub);
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.col-actions button:hover {
+  background: var(--bg-app);
+  color: var(--text-main);
+}

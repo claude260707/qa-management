@@ -1,0 +1,128 @@
+.releases-screen {
+  flex: 1;
+  padding: 32px 40px 60px;
+  max-width: 1180px;
+}
+
+:root {
+  --rel-planned: #2F6FED;
+  --rel-planned-bg: #E8EFFE;
+  --rel-released: #1E8E5A;
+  --rel-released-bg: #E3F6EC;
+  --rel-rolled_back: #C0392B;
+  --rel-rolled_back-bg: #FBE7E4;
+}
+
+.release-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.release-card {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.release-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  cursor: pointer;
+  gap: 16px;
+}
+
+.release-card-top:hover {
+  background: var(--bg-app);
+}
+
+.release-card-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.release-version {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0;
+  font-family: var(--font-mono);
+}
+
+.release-project-tag {
+  font-size: 12px;
+  color: var(--text-sub);
+}
+
+.release-card-side {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 12.5px;
+  color: var(--text-sub);
+  flex-shrink: 0;
+}
+
+.expand-arrow {
+  font-size: 10px;
+}
+
+.release-card-detail {
+  padding: 0 20px 20px;
+  border-top: 1px solid var(--border);
+}
+
+.release-notes {
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  margin: 14px 0;
+  color: var(--text-main);
+}
+
+.release-detail-col {
+  margin-bottom: 14px;
+}
+
+.release-detail-label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-sub);
+  margin-bottom: 6px;
+}
+
+.release-detail-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.release-detail-empty {
+  font-size: 12.5px;
+  color: var(--text-sub);
+}
+
+.release-detail-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.release-status-pill {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 20px;
+  flex-shrink: 0;
+}
+
+.release-status-planned { background: var(--rel-planned-bg); color: var(--rel-planned); }
+.release-status-released { background: var(--rel-released-bg); color: var(--rel-released); }
+.release-status-rolled_back { background: var(--rel-rolled_back-bg); color: var(--rel-rolled_back); }

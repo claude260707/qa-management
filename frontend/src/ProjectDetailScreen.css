@@ -1,0 +1,110 @@
+.pd-screen {
+  flex: 1;
+  padding: 24px 40px 60px;
+  max-width: 1180px;
+}
+
+.pd-back {
+  background: transparent;
+  border: none;
+  color: var(--text-sub);
+  font-size: 13px;
+  padding: 6px 0;
+  margin-bottom: 16px;
+}
+
+.pd-back:hover {
+  color: var(--accent);
+}
+
+.pd-header {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px 28px;
+  margin-bottom: 28px;
+}
+
+.pd-header-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.pd-header-top h1 {
+  font-size: 21px;
+  margin: 0;
+}
+
+.pd-description {
+  color: var(--text-sub);
+  font-size: 13.5px;
+  margin: 0 0 18px;
+  line-height: 1.5;
+}
+
+.pd-meta-row {
+  display: flex;
+  gap: 40px;
+  align-items: flex-end;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.pd-meta-row > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pd-progress-wrap {
+  flex: 1;
+  max-width: 280px;
+}
+
+.pd-section-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.pd-section-title h2 {
+  font-size: 16px;
+  margin: 0;
+}
+
+.pd-section-hint {
+  font-size: 12px;
+  color: var(--text-sub);
+}
+
+.pd-final-summary {
+  background: var(--status-completed-bg);
+  border: 1px solid var(--status-completed);
+  border-radius: var(--radius);
+  padding: 16px 22px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.pd-final-summary span:first-child {
+  font-size: 13.5px;
+  color: var(--status-completed);
+  font-weight: 500;
+}
+
+.pd-final-summary strong {
+  font-size: 22px;
+  color: var(--status-completed);
+  font-family: var(--font-mono);
+}
+
+.pd-final-detail {
+  font-size: 12.5px;
+  color: var(--text-sub);
+  margin-left: auto;
+}
