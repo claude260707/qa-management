@@ -25,7 +25,7 @@ export default function BugModal({ initial, projects, defaultProjectId, prefillF
   const [stepsToReproduce, setStepsToReproduce] = useState(initial?.steps_to_reproduce ?? prefill?.steps ?? '');
   const [expectedResult, setExpectedResult] = useState(initial?.expected_result ?? prefill?.expected_result ?? '');
   const [actualResult, setActualResult] = useState(initial?.actual_result ?? '');
-  const [severity, setSeverity] = useState<BugSeverity>(initial?.severity ?? prefill?.priority ?? 'medium');
+  const [severity, setSeverity] = useState<BugSeverity>(initial?.severity ?? prefill?.priority ?? 'major');
   const [status, setStatus] = useState<BugStatus>(initial?.status ?? 'open');
   const [reporter, setReporter] = useState(initial?.reporter ?? '');
   const [assignee, setAssignee] = useState(initial?.assignee ?? '');

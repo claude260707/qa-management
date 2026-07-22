@@ -77,7 +77,7 @@ export default function TestCaseBulkUploadModal({ requirements, onClose, onImpor
           const requirementName = String(r['요구사항명'] ?? '').trim();
           const warnings: string[] = [];
 
-          let priority: TestCasePriority = 'medium';
+          let priority: TestCasePriority = 'major';
           if (priorityText) {
             const matched = PRIORITY_TEXT_TO_VALUE[priorityText] ?? PRIORITY_TEXT_TO_VALUE[normalize(priorityText)];
             if (matched) {

@@ -3,6 +3,8 @@ import type { Attachment, Requirement, TestCase, TestCaseInput, TestCasePriority
 import { REQ_PRIORITY_LABEL, TC_STATUS_LABEL } from './types';
 import { attachmentsApi } from './api';
 import './ProjectModal.css';
+import * as pdfjsLib from 'pdfjs-dist';
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
 interface Props {
   initial: TestCase | null;
@@ -25,14 +27,63 @@ test('${title || '테스트 제목'}', async ({ page }) => {
 `;
 }
 
+function buildAiPrompt(title: string, precondition: string, steps: string, expectedResult: string, pdfText?: string) {
+  const pdfBlock = pdfText
+    ? `\n[참고 기획문서 발췌]:\n${pdfText}\n`
+    : '';
+  return `다음 테스트 절차를 Playwright 테스트 코드로 변환해줘.
+실제 화면의 정확한 selector는 모르니 TODO 주석으로 표시해줘.
+
+[테스트 제목]: ${title || '(제목 없음)'}
+[사전조건]: ${precondition || '없음'}
+[테스트 절차]:
+${steps || '(작성 필요)'}
+[기대 결과]: ${expectedResult || '(작성 필요)'}${pdfBlock}`;
+}
+function parsePageRange(range: string): number[] {
+  const pages = new Set<number>();
+  range.split(',').forEach((part) => {
+    const trimmed = part.trim();
+    if (!trimmed) return;
+    if (trimmed.includes('-')) {
+      const [start, end] = trimmed.split('-').map((n) => parseInt(n.trim(), 10));
+      if (!isNaN(start) && !isNaN(end)) {
+        for (let i = start; i <= end; i++) pages.add(i);
+      }
+    } else {
+      const n = parseInt(trimmed, 10);
+      if (!isNaN(n)) pages.add(n);
+    }
+  });
+  return Array.from(pages).sort((a, b) => a - b);
+}
+
+async function extractPdfPageText(url: string, pageRange: string): Promise<string> {
+  const pages = parsePageRange(pageRange);
+  if (pages.length === 0) return '';
+  const response = await fetch(url);
+  const buffer = await response.arrayBuffer();
+  const doc = await pdfjsLib.getDocument({ data: buffer }).promise;
+  const chunks: string[] = [];
+  for (const pageNum of pages) {
+    if (pageNum < 1 || pageNum > doc.numPages) continue;
+    const page = await doc.getPage(pageNum);
+    const content = await page.getTextContent();
+    const text = content.items.map((item: any) => item.str).join(' ');
+    chunks.push(`--- ${pageNum}페이지 ---\n${text}`);
+  }
+  return chunks.join('\n\n');
+}
+
 export default function TestCaseModal({ initial, projectId, requirements, attachments, defaultRequirementId, onAttachmentAdded, onClose, onSubmit }: Props) {
+
   const [requirementId, setRequirementId] = useState<number | ''>(initial?.requirement_id ?? defaultRequirementId ?? '');
   const [attachmentId, setAttachmentId] = useState<number | ''>(initial?.attachment_id ?? '');
   const [title, setTitle] = useState(initial?.title ?? '');
   const [precondition, setPrecondition] = useState(initial?.precondition ?? '');
   const [steps, setSteps] = useState(initial?.steps ?? '');
   const [expectedResult, setExpectedResult] = useState(initial?.expected_result ?? '');
-  const [priority, setPriority] = useState<TestCasePriority>(initial?.priority ?? 'medium');
+  const [priority, setPriority] = useState<TestCasePriority>(initial?.priority ?? 'major');
   const [status, setStatus] = useState<TestCaseStatus>(initial?.status ?? 'not_run');
   const [tester, setTester] = useState(initial?.tester ?? '');
   const [automationScript, setAutomationScript] = useState(initial?.automation_script ?? (initial ? '' : buildScriptTemplate('')));
@@ -51,6 +102,49 @@ export default function TestCaseModal({ initial, projectId, requirements, attach
     scriptTouched.current = true;
     setAutomationScript(value);
   }
+
+const [showCodegenGuide, setShowCodegenGuide] = useState(false);
+const [pdfPageRange, setPdfPageRange] = useState('');
+const [pdfExtracting, setPdfExtracting] = useState(false);
+
+const selectedAttachment = attachments.find((a) => a.id === attachmentId);
+const isPdfAttachment = selectedAttachment?.type === 'file'
+  && (selectedAttachment.mime_type === 'application/pdf' || selectedAttachment.original_name?.toLowerCase().endsWith('.pdf'));
+
+function copyTextToClipboard(text: string, successMsg: string) {
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  try {
+    const ok = document.execCommand('copy');
+    alert(ok ? successMsg : '복사에 실패했습니다. 아래 내용을 직접 선택해서 복사해주세요:\n\n' + text);
+  } catch {
+    alert('복사에 실패했습니다. 아래 내용을 직접 선택해서 복사해주세요:\n\n' + text);
+  } finally {
+    document.body.removeChild(textarea);
+  }
+}
+
+async function handleCopyAiPrompt() {
+  let pdfText = '';
+  if (isPdfAttachment && pdfPageRange.trim() && selectedAttachment) {
+    setPdfExtracting(true);
+    try {
+      pdfText = await extractPdfPageText(attachmentsApi.downloadUrl(selectedAttachment.id), pdfPageRange);
+    } catch {
+		alert('PDF 텍스트 추출에 실패했습니다. 페이지 범위를 확인해주세요.');
+      setPdfExtracting(false);
+      return;
+    }
+    setPdfExtracting(false);
+  }
+  const prompt = buildAiPrompt(title, precondition, steps, expectedResult, pdfText || undefined);
+  copyTextToClipboard(prompt, 'AI 프롬프트가 복사되었습니다. Claude.ai에 붙여넣어 주세요.');
+}
 
   // 새 첨부파일 인라인 업로드 상태
   const [showUploadBox, setShowUploadBox] = useState(false);
@@ -141,7 +235,7 @@ export default function TestCaseModal({ initial, projectId, requirements, attach
   }
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop">
       <form className="modal-panel" onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit} style={{ maxWidth: 560 }}>
         <div className="modal-header">
           <h2>{initial ? 'Test Case 수정' : '새 Test Case'}</h2>
@@ -160,19 +254,33 @@ export default function TestCaseModal({ initial, projectId, requirements, attach
           </label>
 
           <label className="field">
-            <span>
-              참고 기획문서/디자인 (선택)
-              {requirementId !== '' && <span style={{ color: 'var(--text-sub)', fontWeight: 400 }}> — 이 요구사항 전용 파일이 위에 먼저 표시됩니다</span>}
-            </span>
-            <select value={attachmentId} onChange={(e) => setAttachmentId(e.target.value === '' ? '' : Number(e.target.value))}>
-              <option value="">선택 안 함</option>
-              {relevantAttachments.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.type === 'link' ? '🔗 ' : '📎 '}{a.original_name}{a.requirement_id ? ' (요구사항 전용)' : ''}
-                </option>
-              ))}
-            </select>
+			<span>
+				참고 기획문서/디자인 (선택)
+				{requirementId !== '' && <span style={{ color: 'var(--text-sub)', fontWeight: 400 }}> — 이 요구사항 전용 파일이 위에 먼저 표시됩니다</span>}
+			</span>
+			<select value={attachmentId} onChange={(e) => setAttachmentId(e.target.value === '' ? '' : Number(e.target.value))}>
+				<option value="">선택 안 함</option>
+				 {relevantAttachments.map((a) => (
+				  <option key={a.id} value={a.id}>
+					{a.type === 'link' ? '🔗 ' : '📎 '}{a.original_name}{a.requirement_id ? ' (요구사항 전용)' : ''}
+				  </option>
+				))}
+			  </select>
           </label>
+
+		  {isPdfAttachment && (
+			<label className="field">
+				<span>PDF 페이지 범위 (선택, 예: 8 또는 8-12)</span>
+				<input
+					value={pdfPageRange}
+					onChange={(e) => setPdfPageRange(e.target.value)}
+					placeholder="예: 8, 10-14"
+				/>
+				<span style={{ fontSize: 12, color: 'var(--text-sub)' }}>
+					입력한 페이지의 텍스트가 AI 프롬프트에 자동으로 포함됩니다 (레이아웃/이미지는 포함되지 않음)
+				</span>
+				</label>
+		   )}
 
           {!showUploadBox ? (
             <button type="button" className="btn-ghost-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setShowUploadBox(true)}>
@@ -244,16 +352,36 @@ export default function TestCaseModal({ initial, projectId, requirements, attach
             <input value={tester} onChange={(e) => setTester(e.target.value)} placeholder="테스트 담당자명" />
           </label>
 
-          <label className="field">
-            <span>자동화 스크립트 (Playwright 등, 선택) — 저장용, 실행은 되지 않음</span>
-            <textarea
-              value={automationScript}
-              onChange={(e) => handleScriptChange(e.target.value)}
-              rows={6}
-              placeholder={"import { test, expect } from '@playwright/test';\n\ntest('...', async ({ page }) => {\n  ...\n});"}
-              style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}
-            />
-          </label>
+         <label className="field">
+			<span>자동화 스크립트 (Playwright 등, 선택) — 저장용, 실행은 되지 않음</span>
+
+			<div className="inline-upload-row" style={{ marginBottom: 8 }}>
+			<button type="button" className="btn-ghost-sm" onClick={handleCopyAiPrompt} disabled={pdfExtracting}>
+				{pdfExtracting ? 'PDF 텍스트 추출 중...' : '🤖 AI 초안 프롬프트 복사'}
+			</button>
+			<button type="button" className="btn-ghost-sm" onClick={() => window.open('https://claude.ai/new', '_blank')}>
+				Claude.ai 새 탭 열기 ↗
+			</button>
+			<button type="button" className="btn-ghost-sm" onClick={() => setShowCodegenGuide(!showCodegenGuide)}>
+				📹 정확한 코드 녹화 방법
+			</button>
+		</div>
+
+		{showCodegenGuide && (
+			<div className="inline-upload-hint" style={{ marginBottom: 8 }}>
+				가장 정확한 방법: cmd에서 <code>npx playwright codegen http://localhost:5173</code> 실행 →
+				뜨는 브라우저에서 테스트 절차대로 직접 클릭·입력 → Inspector 창에 생성된 코드를 복사해서 아래에 붙여넣기
+		</div>
+		)}
+
+		<textarea
+			value={automationScript}
+			onChange={(e) => handleScriptChange(e.target.value)}
+			rows={6}
+			placeholder={"import { test, expect } from '@playwright/test';\n\ntest('...', async ({ page }) => {\n  ...\n});"}
+			style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}
+		/>
+	</label>
 
           {error && <div className="field-error">⚠ {error}</div>}
         </div>

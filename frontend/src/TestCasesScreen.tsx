@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Project, Requirement, TestCase, TestCaseInput, TestCaseBulkItem, TestCaseStatus, RequirementCoverage, Attachment, BugInput } from './types';
+import type { Project, Requirement, TestCase, TestCaseInput, TestCaseBulkItem, TestCasePriority, TestCaseStatus, RequirementCoverage, Attachment, BugInput } from './types';
+
 import { REQ_PRIORITY_LABEL, TC_STATUS_LABEL, STATUS_LABEL } from './types';
 import { projectsApi, requirementsApi, testCasesApi, attachmentsApi, bugsApi } from './api';
 import TestCaseModal from './TestCaseModal';
@@ -7,6 +8,80 @@ import RequirementModal from './RequirementModal';
 import BugModal from './BugModal';
 import TestCaseBulkUploadModal from './TestCaseBulkUploadModal';
 import './TestCasesScreen.css';
+
+function buildBatchPrompt(items: TestCase[]) {
+  const body = items.map((tc) => `제목: ${tc.title}
+[사전조건]: ${tc.precondition || '없음'}
+[테스트 절차]:
+${tc.steps || '(작성 필요)'}
+[기대 결과]: ${tc.expected_result || '(작성 필요)'}`).join('\n\n');
+
+  return `아래 여러 개의 테스트 절차를 각각 Playwright 테스트 코드로 변환해줘.
+실제 selector는 모르니 TODO 주석으로 표시해줘.
+
+${body}
+
+---
+중요: 각 테스트 코드의 맨 첫 줄에 반드시 아래 형식의 주석을 정확히 넣어줘.
+// @TC 테스트제목그대로
+
+이 주석 형식을 지켜야만 시스템이 인식할 수 있어. 마크다운 제목(###)이나 구분선은 쓰지 말고, 코드만 순서대로 이어서 답변해줘.`;
+}
+
+function parseBatchResult(text: string): Record<string, string> {
+  const result: Record<string, string> = {};
+  const markerRegex = /\/\/\s*@TC\s+(.+)/g;
+  const matches = [...text.matchAll(markerRegex)];
+  for (let i = 0; i < matches.length; i++) {
+    const title = matches[i][1].trim();
+    const start = matches[i].index ?? 0;
+    const end = i + 1 < matches.length ? (matches[i + 1].index ?? text.length) : text.length;
+    result[title] = text.slice(start, end).trim();
+  }
+  return result;
+}
+
+function parseBulkTcText(text: string, requirementId: number | null): TestCaseBulkItem[] {
+  const blocks = [...text.matchAll(/\[TC\]([\s\S]*?)\[\/TC\]/g)].map((m) => m[1]);
+  const labelRegex = /^(제목|사전조건|절차|기대결과|우선순위)\s*:\s*(.*)$/;
+  const priorityMap: Record<string, TestCasePriority> = {
+	'높음': 'critical', '보통': 'major', '낮음': 'minor',
+	high: 'critical', medium: 'major', low: 'minor',
+	critical: 'critical', major: 'major', minor: 'minor',
+};
+
+  return blocks.map((block) => {
+    const fields: Record<string, string> = {};
+    let current = '';
+    let buffer: string[] = [];
+    const flush = () => {
+      if (current) fields[current] = buffer.join('\n').trim();
+      buffer = [];
+    };
+    for (const line of block.split('\n')) {
+      const m = line.match(labelRegex);
+      if (m) {
+        flush();
+        current = m[1];
+        buffer.push(m[2]);
+      } else {
+        buffer.push(line);
+      }
+    }
+    flush();
+
+    return {
+      requirement_id: requirementId,
+      title: fields['제목']?.trim() || '(제목 없음)',
+      precondition: fields['사전조건']?.trim() || '',
+      steps: fields['절차']?.trim() || '',
+      expected_result: fields['기대결과']?.trim() || '',
+      priority: priorityMap[fields['우선순위']?.trim()] ?? 'major',
+    };
+  });
+}
+
+
 
 function formatDate(d: string) {
   return d.slice(0, 10);
@@ -32,6 +107,107 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
   const [viewingRequirement, setViewingRequirement] = useState<Requirement | null>(null);
   const [bugPrefillTc, setBugPrefillTc] = useState<TestCase | null>(null);
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [batchPasteOpen, setBatchPasteOpen] = useState(false);
+  const [batchPasteText, setBatchPasteText] = useState('');
+  const [batchApplyMsg, setBatchApplyMsg] = useState<string | null>(null);
+  const [bulkTcPasteOpen, setBulkTcPasteOpen] = useState(false);
+  const [bulkTcPasteText, setBulkTcPasteText] = useState('');
+  const [bulkTcRequirementId, setBulkTcRequirementId] = useState<number | ''>('');
+  const [bulkTcParsed, setBulkTcParsed] = useState<TestCaseBulkItem[]>([]);
+  const [bulkTcChecked, setBulkTcChecked] = useState<Set<number>>(new Set());
+  const [bulkTcMsg, setBulkTcMsg] = useState<string | null>(null);
+  
+
+  function toggleSelected(id: number) {
+	setSelectedIds((prev) => {
+		const next = new Set(prev);
+		if (next.has(id)) {
+			next.delete(id);
+		} else {
+		  next.add(id);
+		}
+		return next;
+  });
+}
+
+  function handleCopyBatchPrompt() {
+  const items = testCases.filter((tc) => selectedIds.has(tc.id));
+  if (items.length === 0) return;
+  const prompt = buildBatchPrompt(items);
+  const textarea = document.createElement('textarea');
+  textarea.value = prompt;
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  try {
+    const ok = document.execCommand('copy');
+    alert(ok
+      ? `${items.length}건의 프롬프트가 복사되었습니다. Claude.ai에 붙여넣어 주세요.`
+      : '복사에 실패했습니다. 다시 시도해주세요.');
+  } catch {
+    alert('복사에 실패했습니다. 다시 시도해주세요.');
+  } finally {
+    document.body.removeChild(textarea);
+  }
+}
+
+  async function handleApplyBatchResult() {
+   const parsed = parseBatchResult(batchPasteText);
+   const items = testCases.filter((tc) => selectedIds.has(tc.id));
+   let applied = 0;
+   for (const tc of items) {
+    const script = parsed[tc.title];
+    if (script) {
+      await testCasesApi.update(tc.id, { automation_script: script });
+      applied += 1;
+    }
+   }
+   setBatchApplyMsg(`${applied}/${items.length}건 적용 완료 (제목이 일치하지 않으면 매칭되지 않습니다)`);
+   setBatchPasteText('');
+   setBatchPasteOpen(false);
+   await load();
+}
+  
+ 
+ function handleParseBulkTc() {
+    const reqId = bulkTcRequirementId === '' ? null : bulkTcRequirementId;
+    const parsed = parseBulkTcText(bulkTcPasteText, reqId);
+    setBulkTcParsed(parsed);
+    setBulkTcChecked(new Set(parsed.map((_, i) => i)));
+    setBulkTcMsg(parsed.length === 0 ? '⚠ [TC]...[/TC] 형식을 찾지 못했습니다.' : null);
+  }
+
+  function toggleBulkTcChecked(idx: number) {
+    setBulkTcChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) {
+        next.delete(idx);
+      } else {
+        next.add(idx);
+      }
+      return next;
+    });
+  }
+
+  async function handleRegisterBulkTc() {
+    if (!projectId) return;
+    const items = bulkTcParsed.filter((_, i) => bulkTcChecked.has(i));
+    if (items.length === 0) return;
+    await testCasesApi.bulkCreate(projectId, items);
+    setBulkTcMsg(`${items.length}건 등록 완료`);
+    setBulkTcPasteText('');
+    setBulkTcParsed([]);
+    setBulkTcChecked(new Set());
+    setBulkTcPasteOpen(false);
+    await load();
+    await refreshCoverage();
+  } 
+  
+  
+  
 
   useEffect(() => {
     projectsApi.list().then(setProjects).catch(() => {});
@@ -42,6 +218,7 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
     requirementsApi.list({ project_id: projectId }).then(setRequirements).catch(() => {});
     attachmentsApi.list({ project_id: projectId }).then(setAttachments).catch(() => {});
     testCasesApi.coverage(projectId).then(setCoverage).catch(() => {});
+	setSelectedIds(new Set()); // 프로젝트 전환 시 선택 초기화
   }, [projectId]);
 
   async function load() {
@@ -192,14 +369,22 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
           </div>
         )}
         <div className="tc-header-actions">
-          <button className="btn-ghost" onClick={() => setBulkUploadOpen(true)}>📤 엑셀 업로드</button>
-          <button
-            className="btn-primary"
-            onClick={() => openCreateForRequirement(null)}
-          >
-            + 새 Test Case
-          </button>
-        </div>
+			<button className="btn-ghost" onClick={() => setBulkUploadOpen(true)}>📤 엑셀 업로드</button>
+			<button className="btn-ghost" onClick={() => setBulkTcPasteOpen(true)}>🤖 AI 초안 붙여넣어 일괄 등록</button>
+			{selectedIds.size > 0 && (
+			<>
+				<button className="btn-ghost" onClick={handleCopyBatchPrompt}>🤖 선택 {selectedIds.size}건 AI 프롬프트 복사</button>
+				<button className="btn-ghost" onClick={() => setBatchPasteOpen(true)}>결과 붙여넣기</button>
+			</>
+		)}
+		<button
+			className="btn-primary"
+			onClick={() => openCreateForRequirement(null)}
+		>
+			+ 새 Test Case
+		</button>
+	</div>
+	
       </header>
 
       {projects.length === 0 ? (
@@ -272,7 +457,7 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
                 ))}
               </select>
               <div className="filter-chips">
-                {(['all', 'not_run', 'pass', 'fail', 'blocked'] as const).map((s) => (
+                {(['all', 'not_run', 'pass', 'fail', 'n_a', 'n_t', 'blocked'] as const).map((s) => (
                   <button
                     key={s}
                     className={`chip ${statusFilter === s ? 'is-active' : ''}`}
@@ -300,9 +485,15 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
                 <article className="tc-card" key={tc.id}>
                   <div className="tc-card-top">
                     <div className="tc-card-tags">
-                      <span className={`priority-pill priority-${tc.priority}`}>{REQ_PRIORITY_LABEL[tc.priority]}</span>
-                      <span className={`tc-status-pill tc-status-${tc.status}`}>{TC_STATUS_LABEL[tc.status]}</span>
-                    </div>
+						<input
+							type="checkbox"
+							checked={selectedIds.has(tc.id)}
+							onChange={() => toggleSelected(tc.id)}
+							title="일괄 AI 프롬프트 대상으로 선택"
+						/>
+						<span className={`priority-pill priority-${tc.priority}`}>{REQ_PRIORITY_LABEL[tc.priority]}</span>
+						<span className={`tc-status-pill tc-status-${tc.status}`}>{TC_STATUS_LABEL[tc.status]}</span>
+					</div>
                     <div className="card-actions">
                       {tc.status === 'fail' && (
                         <button onClick={() => setBugPrefillTc(tc)} title="버그 등록" className="bug-report-btn">🐞 버그 등록</button>
@@ -420,6 +611,89 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
           onClose={() => setBulkUploadOpen(false)}
           onImport={handleBulkImport}
         />
+      )}
+	  
+	  {batchPasteOpen && (
+        <div className="modal-backdrop" onClick={() => setBatchPasteOpen(false)}>
+          <div className="modal-panel" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
+            <div className="modal-header">
+              <h2>AI 결과 일괄 적용</h2>
+              <button type="button" className="modal-close" onClick={() => setBatchPasteOpen(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <label className="field">
+                <span>Claude.ai에서 받은 응답을 통째로 붙여넣으세요</span>
+                <textarea
+                  value={batchPasteText}
+                  onChange={(e) => setBatchPasteText(e.target.value)}
+                  rows={12}
+                  style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}
+                />
+              </label>
+              {batchApplyMsg && <div className="inline-upload-hint">{batchApplyMsg}</div>}
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn-ghost" onClick={() => setBatchPasteOpen(false)}>취소</button>
+              <button type="button" className="btn-primary" onClick={handleApplyBatchResult}>제목 기준 자동 매칭 적용</button>
+            </div>
+          </div>
+        </div>
+      )}
+	  {bulkTcPasteOpen && (
+        <div className="modal-backdrop">
+          <div className="modal-panel" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640 }}>
+            <div className="modal-header">
+              <h2>AI 초안 붙여넣어 TC 일괄 등록</h2>
+              <button type="button" className="modal-close" onClick={() => { setBulkTcPasteOpen(false); setBulkTcParsed([]); setBulkTcChecked(new Set()); }}>✕</button>
+            </div>
+            <div className="modal-body">
+              <label className="field">
+                <span>연결할 요구사항 (선택)</span>
+                <select value={bulkTcRequirementId} onChange={(e) => setBulkTcRequirementId(e.target.value === '' ? '' : Number(e.target.value))}>
+                  <option value="">선택 안 함</option>
+                  {requirements.map((r) => (
+                    <option key={r.id} value={r.id}>{r.title}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="field">
+                <span>Claude 응답을 [TC]...[/TC] 형식으로 붙여넣으세요</span>
+                <textarea
+                  value={bulkTcPasteText}
+                  onChange={(e) => setBulkTcPasteText(e.target.value)}
+                  rows={10}
+                  style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}
+                  placeholder={'[TC]\n제목: ...\n사전조건: ...\n절차: ...\n기대결과: ...\n[/TC]'}
+                />
+              </label>
+
+              <button type="button" className="btn-ghost-sm" onClick={handleParseBulkTc}>파싱하기</button>
+
+              {bulkTcMsg && <div className="inline-upload-hint">{bulkTcMsg}</div>}
+
+              {bulkTcParsed.length > 0 && (
+                <div className="tc-list" style={{ marginTop: 12 }}>
+                  {bulkTcParsed.map((item, idx) => (
+                    <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 0', borderTop: idx > 0 ? '1px solid var(--border)' : 'none' }}>
+                      <input type="checkbox" checked={bulkTcChecked.has(idx)} onChange={() => toggleBulkTcChecked(idx)} />
+                      <div>
+                        <strong>{item.title}</strong>
+                        <div style={{ fontSize: 12, color: 'var(--text-sub)' }}>{item.steps?.slice(0, 60)}...</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn-ghost" onClick={() => setBulkTcPasteOpen(false)}>취소</button>
+              <button type="button" className="btn-primary" disabled={bulkTcChecked.size === 0} onClick={handleRegisterBulkTc}>
+                선택한 {bulkTcChecked.size}건 등록
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

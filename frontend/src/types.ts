@@ -53,7 +53,7 @@ export const STATUS_STAGE_ORDER: ProjectStatus[] = [
 ];
 
 export type RequirementCategory = 'functional' | 'non_functional' | 'ui_ux' | 'performance' | 'security';
-export type RequirementPriority = 'low' | 'medium' | 'high' | 'critical';
+export type RequirementPriority = 'minor' | 'major' | 'critical';
 export type RequirementStatus = 'draft' | 'reviewing' | 'approved' | 'rejected' | 'implemented';
 
 export interface Requirement {
@@ -89,10 +89,26 @@ export const REQ_CATEGORY_LABEL: Record<RequirementCategory, string> = {
 };
 
 export const REQ_PRIORITY_LABEL: Record<RequirementPriority, string> = {
-  low: '낮음',
-  medium: '보통',
-  high: '높음',
+  minor: '낮음',
+  major: '보통',
   critical: '긴급',
+};
+
+export type ExceptionCaseCategory =
+  | 'boundary_value'
+  | 'invalid_input'
+  | 'permission'
+  | 'concurrency'
+  | 'network_failure'
+  | 'data_integrity';
+
+export const EXCEPTION_CATEGORY_LABEL: Record<ExceptionCaseCategory, string> = {
+  boundary_value: '경계값',
+  invalid_input: '잘못된 입력',
+  permission: '권한/인증',
+  concurrency: '동시성',
+  network_failure: '네트워크 장애',
+  data_integrity: '데이터 정합성',
 };
 
 export const REQ_STATUS_LABEL: Record<RequirementStatus, string> = {
@@ -116,11 +132,12 @@ export interface Attachment {
   file_size: number;
   uploader: string | null;
   url: string | null;
+  summary: string | null;
   created_at: string;
 }
 
 export type TestCasePriority = RequirementPriority;
-export type TestCaseStatus = 'not_run' | 'pass' | 'fail' | 'blocked';
+export type TestCaseStatus = 'not_run' | 'pass' | 'fail' | 'n_a' | 'n_t' | 'blocked';
 
 export interface TestCase {
   id: number;
@@ -169,10 +186,12 @@ export interface TestCaseBulkItem {
 }
 
 export const TC_STATUS_LABEL: Record<TestCaseStatus, string> = {
-  not_run: '미실행',
-  pass: '통과',
-  fail: '실패',
-  blocked: '차단됨',
+  not_run: '미진행',
+  pass: 'Pass',
+  fail: 'Fail',
+  n_a: 'N/A',
+  n_t: 'N/T',
+  blocked: 'Blocked',
 };
 
 export interface RequirementCoverage {

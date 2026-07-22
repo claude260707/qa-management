@@ -66,11 +66,11 @@ async function extractPptxText(file: File): Promise<string> {
 
 // TC 생성 프롬프트가 만드는 한글 우선순위를 실제 저장용 코드값으로 매핑
 // (라벨 개편 전까지는 기존 4단계 체계 그대로 사용)
-function mapPriorityToCode(korean: string): 'low' | 'medium' | 'high' | 'critical' {
-  if (korean.includes('높')) return 'high';
-  if (korean.includes('낮')) return 'low';
+function mapPriorityToCode(korean: string): 'minor' | 'major' | 'critical' {
+  if (korean.includes('높')) return 'critical';
+  if (korean.includes('낮')) return 'minor';
   if (korean.includes('긴급') || korean.includes('critical')) return 'critical';
-  return 'medium';
+  return 'major';
 }
 
 interface PlanAnalysisScreenProps {

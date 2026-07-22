@@ -73,7 +73,7 @@ router.post('/', async (req, res) => {
     const result = await pool.query(
       `INSERT INTO requirements (project_id, title, description, category, priority, status, requester)
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [project_id, title, description || null, category || 'functional', priority || 'medium', status || 'draft', requester || null]
+      [project_id, title, description || null, category || 'functional', priority || 'major', status || 'draft', requester || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
