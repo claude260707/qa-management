@@ -16,7 +16,6 @@ export default function ProjectModal({ initial, onClose, onSubmit }: Props) {
   const [manager, setManager] = useState(initial?.manager ?? '');
   const [startDate, setStartDate] = useState(initial?.start_date?.slice(0, 10) ?? '');
   const [endDate, setEndDate] = useState(initial?.end_date?.slice(0, 10) ?? '');
-  const [progress, setProgress] = useState(initial?.progress ?? 0);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,7 +35,6 @@ export default function ProjectModal({ initial, onClose, onSubmit }: Props) {
         manager: manager.trim(),
         start_date: startDate || undefined,
         end_date: endDate || undefined,
-        progress,
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : '저장 중 오류가 발생했습니다.');
@@ -89,11 +87,6 @@ export default function ProjectModal({ initial, onClose, onSubmit }: Props) {
               <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
             </label>
           </div>
-
-          <label className="field">
-            <span>진행률 ({progress}%)</span>
-            <input type="range" min={0} max={100} value={progress} onChange={(e) => setProgress(Number(e.target.value))} />
-          </label>
 
           {error && <div className="field-error">⚠ {error}</div>}
         </div>

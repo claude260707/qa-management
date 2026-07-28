@@ -2,11 +2,6 @@ import './Sidebar.css';
 
 const NAV_ITEMS = [
   { key: 'projects', label: '프로젝트 관리', icon: '◧', ready: true },
-  { key: 'requirements', label: '요구사항 관리', icon: '☰', ready: true },
-  { key: 'files', label: '기획 문서 첨부', icon: '⎘', ready: true },
-  { key: 'testcases', label: 'Test Case 관리', icon: '☑', ready: true },
-  { key: 'bugs', label: 'Bug 관리', icon: '⚠', ready: true },
-  { key: 'release', label: 'Release 관리', icon: '🚀', ready: true },
 ];
 
 export default function Sidebar({ active, onNavigate }: { active: string; onNavigate: (key: string) => void }) {

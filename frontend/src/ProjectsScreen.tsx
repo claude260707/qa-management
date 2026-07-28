@@ -40,13 +40,12 @@ export default function ProjectsScreen({ onOpenDetail }: { onOpenDetail: (id: nu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, keyword]);
 
-  const PLANNING_GROUP: ProjectStatus[] = ['planning', 'planning_done', 'planning_revision'];
-  const PROGRESS_GROUP: ProjectStatus[] = ['in_progress', 'qa_in_progress', 'test_done'];
+  const PROGRESS_GROUP: ProjectStatus[] = ['qa_in_progress', 'test_done'];
   const DONE_GROUP: ProjectStatus[] = ['completed', 'on_hold'];
 
   const summary = useMemo(() => {
     const total = projects.length;
-    const planning = projects.filter((p) => PLANNING_GROUP.includes(p.status)).length;
+    const planning = projects.filter((p) => p.status === 'planning').length;
     const inProgressGroup = projects.filter((p) => PROGRESS_GROUP.includes(p.status)).length;
     const doneGroup = projects.filter((p) => DONE_GROUP.includes(p.status)).length;
     return { total, planning, inProgressGroup, doneGroup };
@@ -87,13 +86,13 @@ export default function ProjectsScreen({ onOpenDetail }: { onOpenDetail: (id: nu
           <span className="stat-value">{summary.total}</span>
           <span className="stat-label">전체 프로젝트</span>
         </div>
-        <div className="stat-card" title="기획중 + 기획완료 + 기획변경">
+        <div className="stat-card" title="QA 미진행 상태인 프로젝트">
           <span className="stat-value" style={{ color: 'var(--status-planning)' }}>{summary.planning}</span>
-          <span className="stat-label">기획</span>
+          <span className="stat-label">{STATUS_LABEL.planning}</span>
         </div>
-        <div className="stat-card" title="진행중 + QA진행중 + 테스트완료">
+        <div className="stat-card" title="QA진행중 + 테스트완료">
           <span className="stat-value" style={{ color: 'var(--status-in_progress)' }}>{summary.inProgressGroup}</span>
-          <span className="stat-label">진행</span>
+          <span className="stat-label">QA 진행</span>
         </div>
         <div className="stat-card" title="완료 + 보류">
           <span className="stat-value" style={{ color: 'var(--status-completed)' }}>{summary.doneGroup}</span>
@@ -109,13 +108,20 @@ export default function ProjectsScreen({ onOpenDetail }: { onOpenDetail: (id: nu
           onChange={(e) => setKeyword(e.target.value)}
         />
         <div className="filter-chips">
-          {(['all', 'planning', 'planning_done', 'planning_revision', 'in_progress', 'qa_in_progress', 'test_done', 'completed', 'on_hold'] as const).map((s) => (
+          {([
+            { key: 'all', label: '전체' },
+            { key: 'planning', label: STATUS_LABEL.planning },
+            { key: 'qa_in_progress', label: STATUS_LABEL.qa_in_progress },
+            { key: 'test_done', label: STATUS_LABEL.test_done },
+            { key: 'completed', label: STATUS_LABEL.completed },
+            { key: 'on_hold', label: STATUS_LABEL.on_hold },
+          ] as const).map((c) => (
             <button
-              key={s}
-              className={`chip ${statusFilter === s ? 'is-active' : ''}`}
-              onClick={() => setStatusFilter(s)}
+              key={c.key}
+              className={`chip ${statusFilter === c.key ? 'is-active' : ''}`}
+              onClick={() => setStatusFilter(c.key)}
             >
-              {s === 'all' ? '전체' : STATUS_LABEL[s]}
+              {c.label}
             </button>
           ))}
         </div>
@@ -147,21 +153,13 @@ export default function ProjectsScreen({ onOpenDetail }: { onOpenDetail: (id: nu
 
               <div className="stage-tracker">
                 {STAGE_ORDER.map((stage, i) => {
-                  const isBranch = p.status === 'on_hold' || p.status === 'planning_revision';
+                  const isBranch = p.status === 'on_hold';
                   const currentIdx = STAGE_ORDER.indexOf(isBranch ? 'planning' : p.status);
                   let stateClass = '';
                   if (p.status === 'on_hold') stateClass = 'is-hold';
-                  else if (p.status === 'planning_revision') stateClass = 'is-revision';
                   else stateClass = i < currentIdx ? 'is-done' : i === currentIdx ? 'is-current' : '';
                   return <span key={stage} className={`stage-dot ${stateClass}`} title={STATUS_LABEL[stage]} />;
                 })}
-              </div>
-
-              <div className="progress-row">
-                <div className="progress-track">
-                  <div className="progress-fill" style={{ width: `${p.progress}%` }} />
-                </div>
-                <span className="progress-value">{p.progress}%</span>
               </div>
 
               <div className="project-meta">
