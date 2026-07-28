@@ -11,7 +11,7 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 app.use('/api/projects', projectsRouter);
@@ -20,6 +20,7 @@ app.use('/api/attachments', attachmentsRouter);
 app.use('/api/test-cases', testCasesRouter);
 app.use('/api/bugs', bugsRouter);
 app.use('/api/releases', releasesRouter);
+app.use('/api/plan', require('./routes/planAnalysis'));
 
 app.listen(PORT, () => {
   console.log(`QA Management API running on http://localhost:${PORT}`);

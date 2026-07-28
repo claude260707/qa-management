@@ -49,6 +49,7 @@ export default function FilesScreen({ embeddedProjectId }: { embeddedProjectId?:
   const [linkRequirementId, setLinkRequirementId] = useState<number | ''>('');
   const [linkSubmitting, setLinkSubmitting] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
+  const [linkSummary, setLinkSummary] = useState('');
 
   useEffect(() => {
     projectsApi.list().then((data) => {
@@ -107,15 +108,17 @@ export default function FilesScreen({ embeddedProjectId }: { embeddedProjectId?:
     setLinkError(null);
     try {
       await attachmentsApi.createLink({
-        project_id: projectId,
-        requirement_id: linkRequirementId || null,
-        title: linkTitle.trim(),
-        url: linkUrl.trim(),
-        uploader: linkUploader.trim() || '익명',
-      });
-      setLinkTitle('');
-      setLinkUrl('');
-      await load();
+		project_id: projectId,
+		requirement_id: linkRequirementId || null,
+		title: linkTitle.trim(),
+		url: linkUrl.trim(),
+		uploader: linkUploader.trim() || '익명',
+		summary: linkSummary.trim() || undefined,
+});
+setLinkTitle('');
+setLinkUrl('');
+setLinkSummary('');
+await load();
     } catch (e) {
       setLinkError(e instanceof Error ? e.message : '링크 추가 중 오류가 발생했습니다.');
     } finally {
@@ -195,7 +198,7 @@ export default function FilesScreen({ embeddedProjectId }: { embeddedProjectId?:
                 <span className="dropzone-icon">⇪</span>
                 <div className="dropzone-text">
                   <strong>파일을 여기로 끌어다 놓거나 클릭해서 업로드</strong>
-                  <span>PPT, 문서, 이미지 등 최대 20MB · 프로젝트: {projects.find((p) => p.id === projectId)?.name}</span>
+                  <span>PPT, 문서, 이미지 등 최대 200MB · 프로젝트: {projects.find((p) => p.id === projectId)?.name}</span>
                 </div>
                 <div className="dropzone-actions">
                   <select
@@ -267,8 +270,17 @@ export default function FilesScreen({ embeddedProjectId }: { embeddedProjectId?:
                   value={linkUploader}
                   onChange={(e) => setLinkUploader(e.target.value)}
                 />
-                <button type="submit" className="btn-primary" disabled={linkSubmitting}>
-                  {linkSubmitting ? '추가 중...' : '링크 추가'}
+				<textarea
+				  className="link-input link-input-summary"
+				  placeholder="화면 요약 (선택, AI 프롬프트 생성에 활용됩니다) — 예: 상품 결제, 상품 담기, 결제 취소 등으로 동작 확인"
+				  value={linkSummary}
+				  onChange={(e) => setLinkSummary(e.target.value)}
+				  rows={2}
+				  style={{ width: '100%', gridColumn: '1 / -1' }}
+				/>
+
+				<button type="submit" className="btn-primary" disabled={linkSubmitting}>
+				  {linkSubmitting ? '추가 중...' : '링크 추가'}
                 </button>
               </form>
               {linkError && <div className="field-error" style={{ marginTop: 10 }}>⚠ {linkError}</div>}
@@ -297,8 +309,9 @@ export default function FilesScreen({ embeddedProjectId }: { embeddedProjectId?:
                         {f.requirement_title && <span className="req-badge">📋 {f.requirement_title}</span>}
                       </div>
                       <div className="file-meta">
-                        {f.type === 'link' ? f.url : formatSize(f.file_size)} · {f.uploader || '익명'} · {formatDate(f.created_at)}
-                      </div>
+						{f.type === 'link' ? f.url : formatSize(f.file_size)} · {f.uploader || '익명'} · {formatDate(f.created_at)}
+					  </div>
+					  {f.summary && <div className="file-summary">📝 {f.summary}</div>}
                     </div>
                     <div className="file-actions">
                       {f.type === 'link' ? (

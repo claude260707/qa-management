@@ -20,7 +20,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB 제한
+  limits: { fileSize: 200 * 1024 * 1024 }, // 200MB 제한
 });
 
 // GET /api/attachments?project_id=1&requirement_id=2 - 파일 목록
@@ -84,7 +84,7 @@ router.post('/', upload.single('file'), async (req, res) => {
 // POST /api/attachments/links - 링크(URL) 추가 (JSON body: project_id, requirement_id, title, url, uploader)
 router.post('/links', async (req, res) => {
   try {
-    const { project_id, requirement_id, title, url, uploader } = req.body;
+    const { project_id, requirement_id, title, url, uploader, summary } = req.body;
     if (!project_id) {
       return res.status(400).json({ error: '프로젝트를 선택해주세요.' });
     }
@@ -96,9 +96,9 @@ router.post('/links', async (req, res) => {
     }
 
     const result = await pool.query(
-      `INSERT INTO attachments (project_id, requirement_id, type, original_name, url, file_size, uploader)
-       VALUES ($1, $2, 'link', $3, $4, 0, $5) RETURNING *`,
-      [project_id, requirement_id || null, title.trim(), url.trim(), uploader || null]
+      `INSERT INTO attachments (project_id, requirement_id, type, original_name, url, file_size, uploader, summary)
+       VALUES ($1, $2, 'link', $3, $4, 0, $5, $6) RETURNING *`,
+      [project_id, requirement_id || null, title.trim(), url.trim(), uploader || null, summary?.trim() || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {

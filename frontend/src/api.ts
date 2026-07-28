@@ -89,7 +89,7 @@ export const attachmentsApi = {
     return fetch(`${BASE_URL}/attachments`, { method: 'POST', body: formData }).then(handle);
   },
 
-  createLink: (input: { project_id: number; requirement_id?: number | null; title: string; url: string; uploader?: string }): Promise<Attachment> =>
+  createLink: (input: { project_id: number; requirement_id?: number | null; title: string; url: string; uploader?: string; summary?: string }): Promise<Attachment> =>
     fetch(`${BASE_URL}/attachments/links`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -203,3 +203,152 @@ export const releasesApi = {
   remove: (id: number): Promise<{ message: string }> =>
     fetch(`${BASE_URL}/releases/${id}`, { method: 'DELETE' }).then(handle),
 };
+
+export const planAnalysisApi = {
+  classifyType: (planText: string): Promise<{ type: string; confidence: number | null; reason: string; serviceName: string }> =>
+    fetch(`${BASE_URL}/plan/classify-type`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ planText }),
+    }).then(handle),
+
+  extractFeatures: (
+    planText: string
+  ): Promise<{ features: { name: string; desc: string }[] }> =>
+    fetch(`${BASE_URL}/plan/extract-features`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ planText }),
+    }).then(handle),
+
+  generateBasicTc: (
+    planText: string,
+    selectedFeatureNames: string[]
+  ): Promise<{
+    testCases: { title: string; priority: string; precondition: string; steps: string; expected_result: string }[];
+  }> =>
+    fetch(`${BASE_URL}/plan/generate-basic-tc`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ planText, selectedFeatureNames }),
+    }).then(handle),
+
+  extractRules: (
+    planText: string
+  ): Promise<{ rules: { summary: string; source: string; risk: string; verify: string }[] }> =>
+    fetch(`${BASE_URL}/plan/extract-rules`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ planText }),
+    }).then(handle),
+
+  getChecklist: (
+    planText: string,
+    projectType: string
+  ): Promise<{ items: { label: string; status: string; missing: boolean; note: string }[] }> =>
+    fetch(`${BASE_URL}/plan/checklist`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ planText, projectType }),
+    }).then(handle),
+
+  generateTc: (
+    planText: string,
+    projectType: string,
+    selectedGapLabels: string[],
+    extractedRules: { summary: string; source: string; risk: string; verify: string }[] = []
+  ): Promise<{
+    testCases: { title: string; priority: string; precondition: string; steps: string; expected_result: string }[];
+  }> =>
+    fetch(`${BASE_URL}/plan/generate-tc`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ planText, projectType, selectedGapLabels, extractedRules }),
+    }).then(handle),
+
+  generateSatisfiedTc: (
+    planText: string,
+    selectedItems: { label: string; note: string }[]
+  ): Promise<{
+    testCases: { title: string; priority: string; precondition: string; steps: string; expected_result: string }[];
+  }> =>
+    fetch(`${BASE_URL}/plan/generate-satisfied-tc`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ planText, selectedItems }),
+    }).then(handle),
+
+  getState: (projectId: number): Promise<{
+    requirementFiles: { name: string; text: string }[];
+    designText: string;
+    designFileName: string;
+    projectType: string;
+    reason: string;
+    serviceName: string;
+    rules: { summary: string; source: string; risk: string; verify: string }[];
+    checklist: { label: string; status: string; missing: boolean; note: string }[];
+    features: { name: string; desc: string }[];
+    consistencyIssues: {
+      category: 'mismatch' | 'internal_contradiction' | 'no_basis';
+      categoryLabel: string;
+      title: string;
+      reqContent: string;
+      designContent: string;
+      location: string;
+      question: string;
+    }[];
+  }> =>
+    fetch(`${BASE_URL}/plan/state/${projectId}`).then(handle),
+
+  saveState: (
+    projectId: number,
+    state: Partial<{
+      requirementFiles: { name: string; text: string }[];
+      designText: string;
+      designFileName: string;
+      projectType: string;
+      reason: string;
+      serviceName: string;
+      rules: { summary: string; source: string; risk: string; verify: string }[];
+      checklist: { label: string; status: string; missing: boolean; note: string }[];
+      features: { name: string; desc: string }[];
+      consistencyIssues: {
+        category: 'mismatch' | 'internal_contradiction' | 'no_basis';
+        categoryLabel: string;
+        title: string;
+        reqContent: string;
+        designContent: string;
+        location: string;
+        question: string;
+      }[];
+    }>
+  ): Promise<{ ok: boolean }> =>
+    fetch(`${BASE_URL}/plan/state/${projectId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(state),
+    }).then(handle),
+
+  checkConsistency: (
+  requirementFiles: { name: string; text: string }[],
+  designText: string
+): Promise<{
+  issues: {
+    category: 'mismatch' | 'internal_contradiction' | 'no_basis';
+    categoryLabel: string;
+    title: string;
+    reqContent: string;
+    designContent: string;
+    location: string;
+    question: string;
+    sourceFile?: string;
+  }[];
+  failedFiles?: string[];
+}> =>
+  fetch(`${BASE_URL}/plan/consistency-check`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requirementFiles, designText })
+  }).then(handle),
+};
+
