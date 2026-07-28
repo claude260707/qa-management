@@ -284,6 +284,8 @@
 .tc-status-pass { background: var(--tc-pass-bg); color: var(--tc-pass); }
 .tc-status-fail { background: var(--tc-fail-bg); color: var(--tc-fail); }
 .tc-status-blocked { background: var(--tc-blocked-bg); color: var(--tc-blocked); }
+.tc-status-n_a { background: var(--tc-n_a-bg); color: var(--tc-n_a); }
+.tc-status-n_t { background: var(--tc-n_t-bg); color: var(--tc-n_t); }
 
 .tc-project-grid {
   display: grid;
@@ -350,3 +352,118 @@
   align-items: center;
   gap: 8px;
 }
+
+.tc-stat-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.tc-stat-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.tc-stat-chip .tc-stat-count {
+  font-family: var(--font-mono);
+  font-size: 14.5px;
+}
+
+.tc-stat-chip.tc-stat-total {
+  background: var(--bg-app);
+  color: var(--text-main);
+}
+
+.tc-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.tc-row:hover {
+  border-color: var(--accent);
+  box-shadow: 0 1px 8px rgba(0, 0, 0, 0.06);
+}
+
+.tc-row input[type="checkbox"] {
+  flex-shrink: 0;
+}
+
+.tc-row-title {
+  flex: 1;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tc-row-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.tc-row-actions button {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+
+.tc-row-actions button:hover {
+  background: var(--bg-app);
+}
+
+.tc-detail-modal {
+  max-width: 640px;
+  max-height: 80vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.tc-detail-modal .modal-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tc-detail-modal .modal-header button {
+  margin-left: auto;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 15px;
+}
+
+.tc-detail-modal {
+  max-width: 640px;
+  max-height: 80vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 28px 32px;
+}
+

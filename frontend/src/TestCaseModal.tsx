@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Attachment, Requirement, TestCase, TestCaseInput, TestCasePriority, TestCaseStatus } from './types';
+import { useEffect, useRef, useState } from 'react';
+import type { Attachment, TestCase, TestCaseInput, TestCasePriority, TestCaseStatus } from './types';
 import { REQ_PRIORITY_LABEL, TC_STATUS_LABEL } from './types';
 import { attachmentsApi } from './api';
 import './ProjectModal.css';
@@ -9,9 +9,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs
 interface Props {
   initial: TestCase | null;
   projectId: number;
-  requirements: Requirement[];
   attachments: Attachment[];
-  defaultRequirementId?: number | null;
   onAttachmentAdded: () => Promise<Attachment[] | undefined>;
   onClose: () => void;
   onSubmit: (input: TestCaseInput) => Promise<void>;
@@ -75,9 +73,10 @@ async function extractPdfPageText(url: string, pageRange: string): Promise<strin
   return chunks.join('\n\n');
 }
 
-export default function TestCaseModal({ initial, projectId, requirements, attachments, defaultRequirementId, onAttachmentAdded, onClose, onSubmit }: Props) {
+export default function TestCaseModal({ initial, projectId, attachments, onAttachmentAdded, onClose, onSubmit }: Props) {
 
-  const [requirementId, setRequirementId] = useState<number | ''>(initial?.requirement_id ?? defaultRequirementId ?? '');
+  // 요구사항 연결 UI는 제거되었지만, 기존에 연결되어 있던 TC를 수정할 때는 값을 그대로 보존한다.
+  const requirementId = initial?.requirement_id ?? null;
   const [attachmentId, setAttachmentId] = useState<number | ''>(initial?.attachment_id ?? '');
   const [title, setTitle] = useState(initial?.title ?? '');
   const [precondition, setPrecondition] = useState(initial?.precondition ?? '');
@@ -90,6 +89,7 @@ export default function TestCaseModal({ initial, projectId, requirements, attach
   const scriptTouched = useRef(!!initial?.automation_script);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [statusNote, setStatusNote] = useState(initial?.status_note ?? '');
 
   // 신규 TC 작성 중이고, 사용자가 스크립트를 직접 손대지 않은 동안에는
   // 제목을 입력할 때마다 기본 템플릿의 테스트명도 함께 갱신해준다.
@@ -154,20 +154,12 @@ async function handleCopyAiPrompt() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 선택한 요구사항과 관련된 첨부파일을 우선 표시 (요구사항 전용 파일 + 프로젝트 공용 파일)
-  const relevantAttachments = useMemo(() => {
-    if (!requirementId) return attachments;
-    const linked = attachments.filter((a) => a.requirement_id === requirementId);
-    const shared = attachments.filter((a) => a.requirement_id === null);
-    return [...linked, ...shared];
-  }, [attachments, requirementId]);
-
   async function handleInlineFileUpload(fileList: FileList | null) {
     if (!fileList || fileList.length === 0) return;
     setUploadBusy(true);
     setUploadError(null);
     try {
-      const uploaded = await attachmentsApi.upload(fileList[0], projectId, '익명', requirementId || null);
+      const uploaded = await attachmentsApi.upload(fileList[0], projectId, '익명', requirementId);
       await onAttachmentAdded();
       setAttachmentId(uploaded.id);
       setShowUploadBox(false);
@@ -189,7 +181,7 @@ async function handleCopyAiPrompt() {
     try {
       const created = await attachmentsApi.createLink({
         project_id: projectId,
-        requirement_id: requirementId || null,
+        requirement_id: requirementId,
         title: newLinkTitle.trim(),
         url: newLinkUrl.trim(),
         uploader: '익명',
@@ -209,15 +201,19 @@ async function handleCopyAiPrompt() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) {
-      setError('Test Case 제목을 입력해주세요.');
-      return;
-    }
+  setError('Test Case 제목을 입력해주세요.');
+  return;
+}
+if ((status === 'fail' || status === 'blocked') && !statusNote.trim()) {
+  setError('실패/차단 사유를 입력해주세요.');
+  return;
+}
     setSubmitting(true);
     setError(null);
     try {
       await onSubmit({
         project_id: projectId,
-        requirement_id: requirementId === '' ? null : requirementId,
+        requirement_id: requirementId,
         attachment_id: attachmentId === '' ? null : attachmentId,
         title: title.trim(),
         precondition: precondition.trim(),
@@ -227,6 +223,7 @@ async function handleCopyAiPrompt() {
         status,
         tester: tester.trim(),
         automation_script: automationScript.trim(),
+        status_note: statusNote.trim() || null,
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : '저장 중 오류가 발생했습니다.');
@@ -244,29 +241,18 @@ async function handleCopyAiPrompt() {
 
         <div className="modal-body">
           <label className="field">
-            <span>연결된 요구사항 (선택)</span>
-            <select value={requirementId} onChange={(e) => { setRequirementId(e.target.value === '' ? '' : Number(e.target.value)); setAttachmentId(''); }}>
-              <option value="">선택 안 함</option>
-              {requirements.map((r) => (
-                <option key={r.id} value={r.id}>{r.title}</option>
-              ))}
-            </select>
-          </label>
-
-          <label className="field">
-			<span>
-				참고 기획문서/디자인 (선택)
-				{requirementId !== '' && <span style={{ color: 'var(--text-sub)', fontWeight: 400 }}> — 이 요구사항 전용 파일이 위에 먼저 표시됩니다</span>}
-			</span>
+			<span>참고 기획문서/디자인 (선택)</span>
 			<select value={attachmentId} onChange={(e) => setAttachmentId(e.target.value === '' ? '' : Number(e.target.value))}>
 				<option value="">선택 안 함</option>
-				 {relevantAttachments.map((a) => (
+				 {attachments.map((a) => (
 				  <option key={a.id} value={a.id}>
 					{a.type === 'link' ? '🔗 ' : '📎 '}{a.original_name}{a.requirement_id ? ' (요구사항 전용)' : ''}
 				  </option>
 				))}
 			  </select>
           </label>
+
+
 
 		  {isPdfAttachment && (
 			<label className="field">
@@ -300,8 +286,8 @@ async function handleCopyAiPrompt() {
                 <input className="field-inline-input" placeholder="https://..." value={newLinkUrl} onChange={(e) => setNewLinkUrl(e.target.value)} />
                 <button type="button" className="btn-ghost-sm" disabled={uploadBusy} onClick={handleInlineLinkAdd}>추가</button>
               </div>
-              {requirementId !== '' && (
-                <div className="inline-upload-hint">📋 현재 선택된 요구사항에 자동으로 연결됩니다</div>
+              {requirementId !== null && (
+                <div className="inline-upload-hint">📋 이 Test Case에 연결된 요구사항에 자동으로 연결됩니다</div>
               )}
               {uploadError && <div className="field-error">⚠ {uploadError}</div>}
             </div>
@@ -346,6 +332,18 @@ async function handleCopyAiPrompt() {
               </select>
             </label>
           </div>
+
+{(status === 'fail' || status === 'blocked' || status === 'n_a') && (
+  <label className="field">
+    <span>사유{status !== 'n_a' && ' *'}</span>
+    <textarea
+      value={statusNote}
+      onChange={(e) => setStatusNote(e.target.value)}
+      placeholder="사유를 입력해주세요"
+      rows={3}
+    />
+  </label>
+)}
 
           <label className="field">
             <span>담당자</span>

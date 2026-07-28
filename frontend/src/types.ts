@@ -1,8 +1,5 @@
 export type ProjectStatus =
   | 'planning'
-  | 'planning_done'
-  | 'planning_revision'
-  | 'in_progress'
   | 'qa_in_progress'
   | 'test_done'
   | 'completed'
@@ -28,25 +25,19 @@ export interface ProjectInput {
   manager?: string;
   start_date?: string;
   end_date?: string;
-  progress?: number;
 }
 
 export const STATUS_LABEL: Record<ProjectStatus, string> = {
-  planning: '기획중',
-  planning_done: '기획완료',
-  planning_revision: '기획변경',
-  in_progress: '진행중',
+  planning: 'QA 미진행',
   qa_in_progress: 'QA진행중',
   test_done: '테스트완료',
   completed: '완료',
   on_hold: '보류',
 };
 
-// 선형 진행 순서 (기획변경/보류는 분기 상태이므로 트래커 순서에서 제외)
+// 선형 진행 순서 (보류는 분기 상태이므로 트래커 순서에서 제외)
 export const STATUS_STAGE_ORDER: ProjectStatus[] = [
   'planning',
-  'planning_done',
-  'in_progress',
   'qa_in_progress',
   'test_done',
   'completed',
@@ -80,6 +71,21 @@ export interface RequirementInput {
   requester?: string;
 }
 
+export interface TestCase {
+  id: number;
+  project_id: number;
+  title: string;
+  status: TestCaseStatus;
+  // ... 다른 필드들
+}
+
+export interface TestCaseInput {
+  project_id: number;
+  title: string;
+  status?: TestCaseStatus;
+  // ... 다른 필드들
+}
+
 export const REQ_CATEGORY_LABEL: Record<RequirementCategory, string> = {
   functional: '기능',
   non_functional: '비기능',
@@ -91,7 +97,7 @@ export const REQ_CATEGORY_LABEL: Record<RequirementCategory, string> = {
 export const REQ_PRIORITY_LABEL: Record<RequirementPriority, string> = {
   minor: '낮음',
   major: '보통',
-  critical: '긴급',
+  critical: '높음',
 };
 
 export type ExceptionCaseCategory =
@@ -159,6 +165,7 @@ export interface TestCase {
   automation_script: string | null;
   created_at: string;
   updated_at: string;
+  status_note: string | null;
 }
 
 export interface TestCaseInput {
@@ -173,6 +180,7 @@ export interface TestCaseInput {
   status?: TestCaseStatus;
   tester?: string;
   automation_script?: string;
+  status_note?: string | null;
 }
 
 export interface TestCaseBulkItem {

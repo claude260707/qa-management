@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Project, Requirement, TestCase, TestCaseInput, TestCaseBulkItem, TestCasePriority, TestCaseStatus, RequirementCoverage, Attachment, BugInput } from './types';
+import type { Project, Requirement, TestCase, TestCaseInput, TestCaseBulkItem, TestCasePriority, TestCaseStatus, Attachment } from './types';
 
 import { REQ_PRIORITY_LABEL, TC_STATUS_LABEL, STATUS_LABEL } from './types';
-import { projectsApi, requirementsApi, testCasesApi, attachmentsApi, bugsApi } from './api';
+import { projectsApi, requirementsApi, testCasesApi, attachmentsApi } from './api';
 import TestCaseModal from './TestCaseModal';
 import RequirementModal from './RequirementModal';
-import BugModal from './BugModal';
 import TestCaseBulkUploadModal from './TestCaseBulkUploadModal';
 import './TestCasesScreen.css';
 
@@ -92,20 +91,17 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
   const [projectId, setProjectId] = useState<number | null>(embeddedProjectId ?? null);
   const [requirements, setRequirements] = useState<Requirement[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [coverage, setCoverage] = useState<RequirementCoverage[]>([]);
   const [testCases, setTestCases] = useState<TestCase[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [keyword, setKeyword] = useState('');
-  const [requirementFilter, setRequirementFilter] = useState<'all' | number>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | TestCaseStatus>('all');
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<TestCase | null>(null);
-  const [prefillRequirementId, setPrefillRequirementId] = useState<number | null>(null);
+  const [viewingTc, setViewingTc] = useState<TestCase | null>(null);
   const [viewingRequirement, setViewingRequirement] = useState<Requirement | null>(null);
-  const [bugPrefillTc, setBugPrefillTc] = useState<TestCase | null>(null);
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [batchPasteOpen, setBatchPasteOpen] = useState(false);
@@ -203,7 +199,6 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
     setBulkTcChecked(new Set());
     setBulkTcPasteOpen(false);
     await load();
-    await refreshCoverage();
   } 
   
   
@@ -217,7 +212,6 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
     if (!projectId) return;
     requirementsApi.list({ project_id: projectId }).then(setRequirements).catch(() => {});
     attachmentsApi.list({ project_id: projectId }).then(setAttachments).catch(() => {});
-    testCasesApi.coverage(projectId).then(setCoverage).catch(() => {});
 	setSelectedIds(new Set()); // 프로젝트 전환 시 선택 초기화
   }, [projectId]);
 
@@ -228,7 +222,6 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
     try {
       const data = await testCasesApi.list({
         project_id: projectId,
-        requirement_id: requirementFilter === 'all' ? undefined : requirementFilter,
         status: statusFilter,
         keyword,
       });
@@ -244,12 +237,7 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
     const t = setTimeout(load, 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId, requirementFilter, statusFilter, keyword]);
-
-  async function refreshCoverage() {
-    if (!projectId) return;
-    testCasesApi.coverage(projectId).then(setCoverage).catch(() => {});
-  }
+  }, [projectId, statusFilter, keyword]);
 
   async function refreshAttachments() {
     if (!projectId) return;
@@ -263,11 +251,15 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
     const pass = testCases.filter((t) => t.status === 'pass').length;
     const fail = testCases.filter((t) => t.status === 'fail').length;
     const notRun = testCases.filter((t) => t.status === 'not_run').length;
-    return { total, pass, fail, notRun };
-  }, [testCases]);
-
-  const uncovered = coverage.filter((c) => Number(c.test_case_count) === 0);
-  const coveredRatio = coverage.length > 0 ? Math.round(((coverage.length - uncovered.length) / coverage.length) * 100) : 0;
+    const blocked = testCases.filter((t) => t.status === 'blocked').length;
+    const na = testCases.filter((t) => t.status === 'n_a').length;
+    const nt = testCases.filter((t) => t.status === 'n_t').length;
+    const passRate = total > 0 ? Math.round((pass / total) * 100) : 0;
+    const criticalFailCount = testCases.filter(
+       (t) => t.priority === 'critical' && t.status === 'fail'
+    ).length;
+    return { total, pass, fail, notRun, blocked, na, nt, passRate, criticalFailCount };
+}, [testCases]);
 
   async function handleSubmit(input: TestCaseInput) {
     if (editing) {
@@ -277,21 +269,13 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
     }
     setModalOpen(false);
     setEditing(null);
-    setPrefillRequirementId(null);
     await load();
-    await refreshCoverage();
   }
 
   async function handleDelete(tc: TestCase) {
     if (!confirm(`"${tc.title}" Test Case를 삭제할까요? 되돌릴 수 없습니다.`)) return;
     await testCasesApi.remove(tc.id);
     await load();
-    await refreshCoverage();
-  }
-
-  async function handleBugSubmit(input: BugInput) {
-    await bugsApi.create(input);
-    setBugPrefillTc(null);
   }
 
   async function handleBulkImport(items: TestCaseBulkItem[]) {
@@ -299,7 +283,6 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
     await testCasesApi.bulkCreate(projectId, items);
     setBulkUploadOpen(false);
     await load();
-    await refreshCoverage();
   }
 
   function downloadAutomationScript(tc: TestCase) {
@@ -320,9 +303,8 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
     URL.revokeObjectURL(url);
   }
 
-  function openCreateForRequirement(reqId: number | null) {
+  function openCreateModal() {
     setEditing(null);
-    setPrefillRequirementId(reqId);
     setModalOpen(true);
   }
 
@@ -379,7 +361,7 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
 		)}
 		<button
 			className="btn-primary"
-			onClick={() => openCreateForRequirement(null)}
+			onClick={openCreateModal}
 		>
 			+ 새 Test Case
 		</button>
@@ -394,53 +376,56 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
         </div>
       ) : (
         <>
-          <section className="coverage-panel">
-            <div className="coverage-header">
-              <div>
-                <span className="coverage-title">요구사항 커버리지</span>
-                <span className="coverage-sub">{coverage.length}개 요구사항 중 {coverage.length - uncovered.length}개에 TC 연결됨</span>
-              </div>
-              <div className="coverage-ratio" data-warn={uncovered.length > 0}>
-                {coveredRatio}%
-              </div>
-            </div>
-            <div className="coverage-bar">
-              <div className="coverage-bar-fill" style={{ width: `${coveredRatio}%` }} />
-            </div>
-            {uncovered.length > 0 ? (
-              <div className="uncovered-list">
-                <span className="uncovered-label">⚠ TC가 없는 요구사항 ({uncovered.length}개) — 설계 누락 가능성</span>
-                {uncovered.map((r) => (
-                  <div className="uncovered-row" key={r.id}>
-                    <span className={`priority-pill priority-${r.priority}`}>{REQ_PRIORITY_LABEL[r.priority]}</span>
-                    <span className="uncovered-title">{r.title}</span>
-                    <button className="btn-ghost-sm" onClick={() => openCreateForRequirement(r.id)}>+ TC 추가</button>
-                  </div>
-                ))}
-              </div>
-            ) : coverage.length > 0 && (
-              <div className="all-covered">✓ 모든 요구사항에 Test Case가 최소 1개 이상 연결되어 있습니다</div>
-            )}
-          </section>
+         <div className="tc-stat-row">
+           <span className="tc-stat-chip tc-stat-total">
+            <span className="tc-stat-count">{summary.total}</span> 전체 TC
+           </span>
+           <span className="tc-stat-chip tc-status-pass">
+             <span className="tc-stat-count">{summary.pass}</span> {TC_STATUS_LABEL.pass}
+           </span>
+           <span className="tc-stat-chip tc-status-fail">
+             <span className="tc-stat-count">{summary.fail}</span> {TC_STATUS_LABEL.fail}
+           </span>
+           <span className="tc-stat-chip tc-status-not_run">
+             <span className="tc-stat-count">{summary.notRun}</span> {TC_STATUS_LABEL.not_run}
+           </span>
+           <span className="tc-stat-chip tc-status-blocked">
+             <span className="tc-stat-count">{summary.blocked}</span> {TC_STATUS_LABEL.blocked}
+           </span>
+           <span className="tc-stat-chip tc-status-n_a">
+             <span className="tc-stat-count">{summary.na}</span> {TC_STATUS_LABEL.n_a}
+           </span>
+           <span className="tc-stat-chip tc-status-n_t">
+             <span className="tc-stat-count">{summary.nt}</span> {TC_STATUS_LABEL.n_t}
+           </span>
+        </div>
 
-          <section className="stat-row">
-            <div className="stat-card">
-              <span className="stat-value">{summary.total}</span>
-              <span className="stat-label">전체 TC</span>
-            </div>
-            <div className="stat-card">
-              <span className="stat-value" style={{ color: 'var(--tc-pass)' }}>{summary.pass}</span>
-              <span className="stat-label">통과</span>
-            </div>
-            <div className="stat-card">
-              <span className="stat-value" style={{ color: 'var(--tc-fail)' }}>{summary.fail}</span>
-              <span className="stat-label">실패</span>
-            </div>
-            <div className="stat-card">
-              <span className="stat-value" style={{ color: 'var(--tc-not_run)' }}>{summary.notRun}</span>
-              <span className="stat-label">미실행</span>
-            </div>
-          </section>
+        <div className="progress-row" style={{ marginBottom: 20 }}>
+          <span style={{ fontSize: 13, color: 'var(--text-sub, #666)', flexShrink: 0 }}>진행률 (통과 기준)</span>
+          <div className="progress-track"><div className="progress-fill" style={{ width: `${summary.passRate}%` }} /></div>
+          <span className="progress-value">{summary.passRate}%</span>
+        </div>
+
+          {/* 신규 - Sign-off 기준 가이드 패널 */}
+          <div
+            style={{
+              marginBottom: 20,
+              padding: '12px 16px',
+              borderRadius: 8,
+              border: '1px solid var(--border, #e5e5e5)',
+              background: 'var(--bg-subtle, #fafafa)',
+              fontSize: 13,
+            }}
+          >
+            <div style={{ fontWeight: 600, marginBottom: 8 }}>Sign-off 기준</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span>
+              {summary.passRate >= 95 ? '✅' : '⬜'} Pass율 95% 이상 (현재 {summary.passRate}%)
+            </span>
+            <span>{summary.criticalFailCount === 0 ? '✅' : '⚠️'} Critical 등급 TC 중 fail {summary.criticalFailCount}건</span>
+            <span>⬜ 요구조건 충족 (정합성 검수 이슈 해소)</span>
+          </div>
+        </div>
 
           <section className="toolbar">
             <input
@@ -450,12 +435,6 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
               onChange={(e) => setKeyword(e.target.value)}
             />
             <div className="toolbar-filters">
-              <select value={requirementFilter} onChange={(e) => setRequirementFilter(e.target.value === 'all' ? 'all' : Number(e.target.value))}>
-                <option value="all">전체 요구사항</option>
-                {requirements.map((r) => (
-                  <option key={r.id} value={r.id}>{r.title}</option>
-                ))}
-              </select>
               <div className="filter-chips">
                 {(['all', 'not_run', 'pass', 'fail', 'n_a', 'n_t', 'blocked'] as const).map((s) => (
                   <button
@@ -482,93 +461,27 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
           ) : (
             <div className="tc-list">
               {testCases.map((tc) => (
-                <article className="tc-card" key={tc.id}>
-                  <div className="tc-card-top">
-                    <div className="tc-card-tags">
-						<input
-							type="checkbox"
-							checked={selectedIds.has(tc.id)}
-							onChange={() => toggleSelected(tc.id)}
-							title="일괄 AI 프롬프트 대상으로 선택"
-						/>
-						<span className={`priority-pill priority-${tc.priority}`}>{REQ_PRIORITY_LABEL[tc.priority]}</span>
-						<span className={`tc-status-pill tc-status-${tc.status}`}>{TC_STATUS_LABEL[tc.status]}</span>
-					</div>
-                    <div className="card-actions">
-                      {tc.status === 'fail' && (
-                        <button onClick={() => setBugPrefillTc(tc)} title="버그 등록" className="bug-report-btn">🐞 버그 등록</button>
-                      )}
-                      <button onClick={() => { setEditing(tc); setPrefillRequirementId(null); setModalOpen(true); }} title="수정">✎</button>
-                      <button onClick={() => handleDelete(tc)} title="삭제">✕</button>
-                    </div>
-                  </div>
-
-                  <h3 className="tc-title">{tc.title}</h3>
-
-                  <div className="tc-links">
-                    {tc.requirement_title && (
-                      <button
-                        type="button"
-                        className="tc-link-tag req-tag req-tag-clickable"
-                        onClick={() => {
-                          const req = requirements.find((r) => r.id === tc.requirement_id);
-                          if (req) setViewingRequirement(req);
-                        }}
-                        title="요구사항 상세 보기"
-                      >
-                        📋 {tc.requirement_title}
-                      </button>
-                    )}
-                    {tc.attachment_name && (
-                      tc.attachment_type === 'link' ? (
-                        <a className="tc-link-tag design-tag" href={tc.attachment_url ?? '#'} target="_blank" rel="noopener noreferrer">🔗 {tc.attachment_name}</a>
-                      ) : (
-                        <a className="tc-link-tag design-tag" href={attachmentsApi.downloadUrl(tc.attachment_id!)}>📎 {tc.attachment_name}</a>
-                      )
-                    )}
-                  </div>
-
-                  {tc.precondition && (
-                    <div className="tc-field">
-                      <span className="tc-field-label">사전조건</span>
-                      <p>{tc.precondition}</p>
-                    </div>
-                  )}
-                  {tc.steps && (
-                    <div className="tc-field">
-                      <span className="tc-field-label">테스트 절차</span>
-                      <pre>{tc.steps}</pre>
-                    </div>
-                  )}
-                  {tc.expected_result && (
-                    <div className="tc-field">
-                      <span className="tc-field-label">기대 결과</span>
-                      <p>{tc.expected_result}</p>
-                    </div>
-                  )}
-                  {tc.automation_script && (
-                    <details className="tc-script-details">
-                      <summary>
-                        🤖 자동화 스크립트 보기
-                        <button
-                          type="button"
-                          className="tc-script-download-btn"
-                          onClick={(e) => { e.preventDefault(); downloadAutomationScript(tc); }}
-                          title=".spec.ts 파일로 다운로드"
-                        >
-                          📥 .spec.ts 다운로드
-                        </button>
-                      </summary>
-                      <pre className="tc-script-pre">{tc.automation_script}</pre>
-                    </details>
-                  )}
-
-                  <div className="tc-meta">
-                    <span>담당자: {tc.tester || '-'}</span>
-                    <span className="mono-cell">{formatDate(tc.created_at)}</span>
-                  </div>
-                </article>
-              ))}
+  <article
+    className="tc-row"
+    key={tc.id}
+    onClick={() => setViewingTc(tc)}
+  >
+    <input
+      type="checkbox"
+      checked={selectedIds.has(tc.id)}
+      onChange={() => toggleSelected(tc.id)}
+      onClick={(e) => e.stopPropagation()}
+      title="일괄 AI 프롬프트 대상으로 선택"
+    />
+    <span className={`priority-pill priority-${tc.priority}`}>{REQ_PRIORITY_LABEL[tc.priority]}</span>
+    <span className={`tc-status-pill tc-status-${tc.status}`}>{TC_STATUS_LABEL[tc.status]}</span>
+    <h3 className="tc-row-title">{tc.title}</h3>
+    <div className="tc-row-actions" onClick={(e) => e.stopPropagation()}>
+      <button onClick={() => { setEditing(tc); setModalOpen(true); }} title="수정">✏️</button>
+      <button onClick={() => handleDelete(tc)} title="삭제">✕</button>
+    </div>
+  </article>
+))}
             </div>
           )}
         </>
@@ -578,30 +491,113 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
         <TestCaseModal
           initial={editing}
           projectId={projectId}
-          requirements={requirements}
           attachments={attachments}
-          defaultRequirementId={prefillRequirementId}
           onAttachmentAdded={refreshAttachments}
-          onClose={() => { setModalOpen(false); setEditing(null); setPrefillRequirementId(null); }}
+          onClose={() => { setModalOpen(false); setEditing(null); }}
           onSubmit={handleSubmit}
         />
       )}
+
+
+{viewingTc && (
+  <div className="modal-backdrop" onClick={() => setViewingTc(null)}>
+   <div className="modal-panel tc-detail-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-header">
+        <span className={`priority-pill priority-${viewingTc.priority}`}>{REQ_PRIORITY_LABEL[viewingTc.priority]}</span>
+        <span className={`tc-status-pill tc-status-${viewingTc.status}`}>{TC_STATUS_LABEL[viewingTc.status]}</span>
+        <button onClick={() => setViewingTc(null)} title="닫기">✕</button>
+      </div>
+
+      <h3 className="tc-title">{viewingTc.title}</h3>
+
+      <div className="tc-links">
+        {viewingTc.requirement_title && (
+          <button
+            className="tc-link-tag req-tag req-tag-clickable"
+            onClick={() => {
+              const req = requirements.find((r) => r.id === viewingTc.requirement_id);
+              if (req) setViewingRequirement(req);
+            }}
+            title="요구사항 상세 보기"
+          >
+            {viewingTc.requirement_title}
+          </button>
+        )}
+        {viewingTc.attachment_name && (
+          viewingTc.attachment_type === 'link' ? (
+            <a className="tc-link-tag design-tag" href={viewingTc.attachment_url ?? '#'}>{viewingTc.attachment_name}</a>
+          ) : (
+            <a className="tc-link-tag design-tag" href={attachmentsApi.downloadUrl(viewingTc.id)}>{viewingTc.attachment_name}</a>
+          )
+        )}
+      </div>
+
+      {viewingTc.precondition && (
+        <div className="tc-field">
+          <span className="tc-field-label">사전조건</span>
+          <p>{viewingTc.precondition}</p>
+        </div>
+      )}
+      {viewingTc.steps && (
+        <div className="tc-field">
+          <span className="tc-field-label">테스트 절차</span>
+          <pre>{viewingTc.steps}</pre>
+        </div>
+      )}
+      {viewingTc.expected_result && (
+        <div className="tc-field">
+          <span className="tc-field-label">기대 결과</span>
+          <p>{viewingTc.expected_result}</p>
+        </div>
+      )}
+
+
+      {viewingTc.status_note && (
+  <div className="tc-status-note">
+    <span className="tc-status-note-label">사유</span>
+    <p>{viewingTc.status_note}</p>
+  </div>
+)}
+      {viewingTc.automation_script && (
+        <details className="tc-script-details">
+          <summary>
+            🤖 자동화 스크립트 보기
+            <button
+              className="tc-script-download-btn"
+              onClick={(e) => { e.preventDefault(); downloadAutomationScript(viewingTc); }}
+              title=".spec.ts 파일로 다운로드"
+            >
+              📄 .spec.ts 다운로드
+            </button>
+          </summary>
+          <pre className="tc-script-pre">{viewingTc.automation_script}</pre>
+        </details>
+      )}
+
+      <div className="tc-meta">
+        <span>담당자: {viewingTc.tester || '-'}</span>
+        <span className="mono-cell">{formatDate(viewingTc.created_at)}</span>
+      </div>
+
+      <div className="modal-footer">
+        <button
+          className="btn-primary"
+          onClick={() => { setEditing(viewingTc); setModalOpen(true); setViewingTc(null); }}
+        >
+          수정하기
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+
 
       {viewingRequirement && (
         <RequirementModal
           initial={viewingRequirement}
           readOnly
           onClose={() => setViewingRequirement(null)}
-        />
-      )}
-
-      {bugPrefillTc && (
-        <BugModal
-          initial={null}
-          projects={projects}
-          prefillFromTestCase={bugPrefillTc}
-          onClose={() => setBugPrefillTc(null)}
-          onSubmit={handleBugSubmit}
         />
       )}
 

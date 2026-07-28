@@ -146,7 +146,7 @@ router.post('/bulk', async (req, res) => {
 // POST /api/test-cases - 생성
 router.post('/', async (req, res) => {
   try {
-    const { project_id, requirement_id, attachment_id, title, precondition, steps, expected_result, priority, status, tester, automation_script } = req.body;
+    const { project_id, requirement_id, attachment_id, title, precondition, steps, expected_result, priority, status, tester, automation_script, status_note } = req.body;
     if (!project_id) {
       return res.status(400).json({ error: '프로젝트를 선택해주세요.' });
     }
@@ -154,9 +154,9 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Test Case 제목은 필수입니다.' });
     }
     const result = await pool.query(
-      `INSERT INTO test_cases (project_id, requirement_id, attachment_id, title, precondition, steps, expected_result, priority, status, tester, automation_script)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *`,
-      [project_id, requirement_id || null, attachment_id || null, title, precondition || null, steps || null, expected_result || null, priority || 'medium', status || 'not_run', tester || null, automation_script || null]
+      `INSERT INTO test_cases (project_id, requirement_id, attachment_id, title, precondition, steps, expected_result, priority, status, tester, automation_script, status_note)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+      [project_id, requirement_id || null, attachment_id || null, title, precondition || null, steps || null, expected_result || null, priority || 'medium', status || 'not_run', tester || null, automation_script || null, status_note || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -168,7 +168,7 @@ router.post('/', async (req, res) => {
 // PUT /api/test-cases/:id - 수정
 router.put('/:id', async (req, res) => {
   try {
-    const { project_id, requirement_id, attachment_id, title, precondition, steps, expected_result, priority, status, tester, automation_script } = req.body;
+    const { project_id, requirement_id, attachment_id, title, precondition, steps, expected_result, priority, status, tester, automation_script, status_note } = req.body;
     const result = await pool.query(
       `UPDATE test_cases SET
         project_id = COALESCE($1, project_id),
@@ -182,9 +182,10 @@ router.put('/:id', async (req, res) => {
         status = COALESCE($9, status),
         tester = $10,
         automation_script = $11,
+        status_note = $13,
         updated_at = NOW()
-       WHERE id = $12 RETURNING *`,
-      [project_id, requirement_id || null, attachment_id || null, title, precondition, steps, expected_result, priority, status, tester, automation_script, req.params.id]
+        WHERE id = $12 RETURNING *`,
+      [project_id, requirement_id || null, attachment_id || null, title, precondition, steps, expected_result, priority, status, tester, automation_script, req.params.id, status_note || null]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Test Case를 찾을 수 없습니다.' });
