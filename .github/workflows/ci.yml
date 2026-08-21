@@ -1,0 +1,98 @@
+name: CI
+
+# main 브랜치에 push 하거나, main으로 향하는 PR을 만들 때마다 자동 실행됩니다.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ---------------------------
+  # 1) Backend: lint + test
+  # ---------------------------
+  backend:
+    runs-on: ubuntu-latest
+
+    # 테스트 중 실제 PostgreSQL이 필요하면 이 서비스가 자동으로 컨테이너로 떠줍니다.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: qa_management_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: 저장소 코드 가져오기
+        uses: actions/checkout@v4
+
+      - name: Node.js 20 설치
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: backend/package-lock.json
+
+      - name: 의존성 설치
+        working-directory: backend
+        run: npm ci
+
+      # package.json에 "test" 스크립트가 없다면 이 스텝은 건너뛰거나
+      # 나중에 테스트 코드가 생기면 그때 살려서 쓰면 됩니다.
+      - name: 테스트 실행
+        working-directory: backend
+        run: npm test --if-present
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/qa_management_test
+
+  # ---------------------------
+  # 2) Frontend: lint + build
+  # ---------------------------
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 저장소 코드 가져오기
+        uses: actions/checkout@v4
+
+      - name: Node.js 20 설치
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 의존성 설치
+        working-directory: frontend
+        run: npm ci
+
+      - name: 린트 검사
+        working-directory: frontend
+        run: npm run lint --if-present
+
+      - name: 타입 체크 + 빌드
+        working-directory: frontend
+        run: npm run build
+
+  # ---------------------------
+  # 3) 최종 결과 요약 (선택)
+  # ---------------------------
+  ci-success:
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: 결과 확인
+        run: |
+          if [ "${{ needs.backend.result }}" != "success" ] || [ "${{ needs.frontend.result }}" != "success" ]; then
+            echo "CI 실패: backend=${{ needs.backend.result }}, frontend=${{ needs.frontend.result }}"
+            exit 1
+          fi
+          echo "CI 성공"
