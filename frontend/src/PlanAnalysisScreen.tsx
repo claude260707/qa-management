@@ -77,6 +77,7 @@ interface ConsistencyIssue {
   designContent: string;
   location: string;
   question: string;
+  confirmedValue?: string;
 }
 
 const CATEGORY_META: Record<ConsistencyIssue['category'], { icon: string; label: string; color: string; desc: string }> = {
@@ -138,7 +139,7 @@ export default function PlanAnalysisScreen({ embeddedProjectId }: PlanAnalysisSc
   const [editingType, setEditingType] = useState(false);
   const [manualServiceNameInput, setManualServiceNameInput] = useState('');
   const [editingServiceName, setEditingServiceName] = useState(false);
-  const [rules, setRules] = useState<{ summary: string; source: string; risk: string; verify: string; confirmed?: 'correct' | 'incorrect' | null }[]>([]);
+  const [rules, setRules] = useState<{ summary: string; source: string; risk: string; verify: string; confirmed?: 'correct' | 'incorrect' | null; reasonNote?: string; needsReview?: boolean }[]>([]);
 
   const [extractingRules, setExtractingRules] = useState(false);
   const [selectedRuleIdx, setSelectedRuleIdx] = useState<Set<number>>(new Set());
@@ -151,7 +152,7 @@ export default function PlanAnalysisScreen({ embeddedProjectId }: PlanAnalysisSc
   // --- 정합성 검수 (요구사항 vs 화면설계서) ---
   const [checkingConsistency, setCheckingConsistency] = useState(false);
   const [issues, setIssues] = useState<ConsistencyIssue[]>([]);
-  const [selectedIssueIdx, setSelectedIssueIdx] = useState<Set<number>>(new Set());
+  const [resolvedIssues, setResolvedIssues] = useState<ConsistencyIssue[]>([]);
 
   // --- 기본 기능(정상 케이스) TC 생성 - 화면설계서 기준, 독립 실행 ---
   const [extractingFeatures, setExtractingFeatures] = useState(false);
@@ -172,6 +173,8 @@ export default function PlanAnalysisScreen({ embeddedProjectId }: PlanAnalysisSc
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
   const [selectedGaps, setSelectedGaps] = useState<Set<string>>(new Set());
   const [selectedSatisfied, setSelectedSatisfied] = useState<Set<string>>(new Set());
+  const [expandedChecklist, setExpandedChecklist] = useState<Set<string>>(new Set());
+  const [checklistChanges, setChecklistChanges] = useState<Record<string, boolean>>({});
 
   // --- TC 생성 (예외 케이스 탭: 누락의심 + 충족항목) ---
   const [generatingTc, setGeneratingTc] = useState(false);
@@ -187,12 +190,6 @@ export default function PlanAnalysisScreen({ embeddedProjectId }: PlanAnalysisSc
   const [generateRuleProgress, setGenerateRuleProgress] = useState('');
   const [savingRuleTc, setSavingRuleTc] = useState(false);
   const [saveRuleTcMessage, setSaveRuleTcMessage] = useState('');
-
-  // --- TC 생성 (정합성 검수 탭: 선택한 이슈만) ---
-  const [generatingIssueTc, setGeneratingIssueTc] = useState(false);
-  const [generateIssueProgress, setGenerateIssueProgress] = useState('');
-  const [savingIssueTc, setSavingIssueTc] = useState(false);
-  const [saveIssueTcMessage, setSaveIssueTcMessage] = useState('');
 
   const [error, setError] = useState('');
   const [restoringState, setRestoringState] = useState(true);
@@ -270,7 +267,7 @@ export default function PlanAnalysisScreen({ embeddedProjectId }: PlanAnalysisSc
     setRules([]);
     setSelectedRuleIdx(new Set());
     setIssues([]);
-    setSelectedIssueIdx(new Set());
+    setResolvedIssues([]);
     setFeatures([]);
     setSelectedFeatureIdx(new Set());
     setBasicTestCases([]);
@@ -281,6 +278,8 @@ export default function PlanAnalysisScreen({ embeddedProjectId }: PlanAnalysisSc
     setChecklist([]);
     setSelectedGaps(new Set());
     setSelectedSatisfied(new Set());
+    setExpandedChecklist(new Set());
+    setChecklistChanges({});
     setTestCases([]);
     setSavedTcIdx(new Set());
   }
@@ -315,15 +314,32 @@ export default function PlanAnalysisScreen({ embeddedProjectId }: PlanAnalysisSc
   }
 
 function setRuleConfirmed(idx: number, value: 'correct' | 'incorrect' | null) {
-  setRules((prev) => prev.map((r, i) => (i === idx ? { ...r, confirmed: value } : r)));
+  const updated = rules.map((r, i) => (i === idx ? { ...r, confirmed: value, needsReview: false } : r));
+  setRules(updated);
   // 맞음 확인 시 TC 생성 대상에 자동 포함, 틀림 처리 시 자동 제외(재검토 필요하므로).
-  // null로 되돌아가는 경우(토글 해제)는 사용자가 직접 체크박스로 다시 판단하도록 건드리지 않음.
+  // 토글 해제(null)로 돌아가는 경우는 기본값인 "포함"으로 되돌린다.
   setSelectedRuleIdx((prev) => {
     const next = new Set(prev);
-    if (value === 'correct') next.add(idx);
-    else if (value === 'incorrect') next.delete(idx);
+    if (value === 'correct' || value === null) next.add(idx);
+    else next.delete(idx);
     return next;
   });
+  persistState({ rules: updated });
+}
+
+function setRuleReasonNote(idx: number, note: string) {
+  setRules((prev) => prev.map((r, i) => (i === idx ? { ...r, reasonNote: note } : r)));
+}
+
+function persistRuleReasonNote() {
+  persistState({ rules });
+}
+
+function handleSelectAllRulesCorrect() {
+  const updated = rules.map((r) => ({ ...r, confirmed: 'correct' as const, needsReview: false }));
+  setRules(updated);
+  setSelectedRuleIdx(new Set(rules.map((_, idx) => idx)));
+  persistState({ rules: updated });
 }
 
 function handleExportIssuesExcel() {
@@ -336,11 +352,10 @@ function handleExportIssuesExcel() {
     화면설계서_내용: issue.designContent,
     위치: issue.location,
     확인질문: issue.question,
-    TC생성_선택여부: selectedIssueIdx.has(i) ? 'O' : '',
-    수정확인: '', // 화면설계서 수정 담당자가 확인 후 체크할 수 있도록 빈 칸으로 제공
+    확정값: issue.confirmedValue || '',
   }));
   const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = [{ wch: 6 }, { wch: 16 }, { wch: 30 }, { wch: 40 }, { wch: 40 }, { wch: 20 }, { wch: 40 }, { wch: 12 }, { wch: 10 }];
+  ws['!cols'] = [{ wch: 6 }, { wch: 16 }, { wch: 30 }, { wch: 40 }, { wch: 40 }, { wch: 20 }, { wch: 40 }, { wch: 30 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, '정합성검수결과');
   XLSX.writeFile(wb, `정합성검수결과_${serviceName || 'project'}_${new Date().toISOString().slice(0, 10)}.xlsx`);
@@ -385,7 +400,7 @@ function handleExportIssuesExcel() {
       setDesignText(fullText);
       // 화면설계서가 바뀌면 화면설계서 기반 분석 결과는 다시 돌려야 함
       setIssues([]);
-      setSelectedIssueIdx(new Set());
+      setResolvedIssues([]);
       setFeatures([]);
       setSelectedFeatureIdx(new Set());
       setBasicTestCases([]);
@@ -396,6 +411,8 @@ function handleExportIssuesExcel() {
       setChecklist([]);
       setSelectedGaps(new Set());
       setSelectedSatisfied(new Set());
+      setExpandedChecklist(new Set());
+      setChecklistChanges({});
       setTestCases([]);
       setSavedTcIdx(new Set());
       persistState({
@@ -439,23 +456,28 @@ function handleExportIssuesExcel() {
     setExtractingRules(true);
     try {
       const result = await planAnalysisApi.extractRules(requirementText);
-      setRules(result.rules);
-      setSelectedRuleIdx(new Set(result.rules.map((_, idx) => idx)));
-      persistState({ rules: result.rules });
+      // 재분석 시 이전 판단(맞음/틀림/사유)을 규칙 문구(summary) 기준으로 이어받고,
+      // 근거(source)가 이전과 달라졌으면 재검토가 필요하므로 판단을 초기화하고 배지를 띄운다.
+      const prevBySummary = new Map(rules.map((r) => [r.summary, r]));
+      const merged = result.rules.map((r) => {
+        const prev = prevBySummary.get(r.summary);
+        if (!prev) return { ...r, confirmed: null, reasonNote: undefined, needsReview: false };
+        const needsReview = prev.source !== r.source;
+        return {
+          ...r,
+          confirmed: needsReview ? null : (prev.confirmed ?? null),
+          reasonNote: needsReview ? undefined : prev.reasonNote,
+          needsReview,
+        };
+      });
+      setRules(merged);
+      setSelectedRuleIdx(new Set(merged.map((_, idx) => idx).filter((idx) => merged[idx].confirmed !== 'incorrect')));
+      persistState({ rules: merged });
     } catch (err: any) {
       setError(err.message || '규칙 추출 중 오류가 발생했습니다.');
     } finally {
       setExtractingRules(false);
     }
-  }
-
-  function toggleRule(idx: number) {
-    setSelectedRuleIdx((prev) => {
-      const next = new Set(prev);
-      if (next.has(idx)) next.delete(idx);
-      else next.add(idx);
-      return next;
-    });
   }
 
   async function handleCheckConsistency() {
@@ -465,16 +487,14 @@ function handleExportIssuesExcel() {
     }
     setError('');
     setCheckingConsistency(true);
+    const prevIssues = issues;
     setIssues([]);
-    setSelectedIssueIdx(new Set());
     try {
       const result = await planAnalysisApi.checkConsistency(requirementFilesPayload, designText);
+      // 재검수 시 이전엔 있었는데 이번엔 안 나온 이슈는 "해결됨"으로 별도 보관 (제목 기준 매칭)
+      const newTitles = new Set(result.issues.map((iss) => iss.title));
+      setResolvedIssues(prevIssues.filter((iss) => !newTitles.has(iss.title)));
       setIssues(result.issues);
-      // 기본값: "값 불일치"만 기본 선택 (제일 확실한 문제이므로), 나머지는 사람이 보고 선택
-      const defaultSelected = new Set(
-        result.issues.map((iss, idx) => (iss.category === 'mismatch' ? idx : -1)).filter((idx) => idx >= 0)
-      );
-      setSelectedIssueIdx(defaultSelected);
       persistState({ consistencyIssues: result.issues });
     } catch (err: any) {
       setError(err.message || '정합성 검수 중 오류가 발생했습니다.');
@@ -483,13 +503,12 @@ function handleExportIssuesExcel() {
     }
   }
 
-  function toggleIssue(idx: number) {
-    setSelectedIssueIdx((prev) => {
-      const next = new Set(prev);
-      if (next.has(idx)) next.delete(idx);
-      else next.add(idx);
-      return next;
-    });
+  function updateIssueConfirmedValue(idx: number, value: string) {
+    setIssues((prev) => prev.map((iss, i) => (i === idx ? { ...iss, confirmedValue: value } : iss)));
+  }
+
+  function persistIssueConfirmedValue() {
+    persistState({ consistencyIssues: issues });
   }
 
   async function handleExtractFeatures() {
@@ -635,6 +654,14 @@ function handleExportIssuesExcel() {
     setLoadingChecklist(true);
     try {
       const result = await planAnalysisApi.getChecklist(designText, projectType);
+      // 재분석 시 충족↔누락 의심 상태가 바뀐 항목을 라벨 기준으로 찾아 "변경됨" 배지 데이터로 보관
+      const prevByLabel = new Map(checklist.map((c) => [c.label, c]));
+      const changes: Record<string, boolean> = {};
+      result.items.forEach((item) => {
+        const prev = prevByLabel.get(item.label);
+        if (prev && prev.missing !== item.missing) changes[item.label] = prev.missing;
+      });
+      setChecklistChanges(changes);
       setChecklist(result.items);
       setSelectedGaps(new Set(result.items.filter((i) => i.missing).map((i) => i.label)));
       setSelectedSatisfied(new Set());
@@ -644,6 +671,15 @@ function handleExportIssuesExcel() {
     } finally {
       setLoadingChecklist(false);
     }
+  }
+
+  function toggleChecklistExpand(label: string) {
+    setExpandedChecklist((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
   }
 
   function toggleGap(label: string) {
@@ -788,58 +824,6 @@ function handleExportIssuesExcel() {
     }
   }
 
-  // 정합성 검수 탭 전용 - 선택한 이슈만으로 검증 TC 생성 (다른 탭 결과는 건드리지 않고 이어붙임)
-  async function handleGenerateIssueTc() {
-    const issueItems = Array.from(selectedIssueIdx).map((idx) => ({ label: issues[idx].title, note: issues[idx].question }));
-    if (issueItems.length === 0) {
-      setError('TC를 생성할 이슈를 하나 이상 선택해주세요.');
-      return;
-    }
-    if (!designText.trim()) {
-      setError('화면설계서 내용이 없습니다. TC는 화면설계서를 기준으로 생성됩니다.');
-      return;
-    }
-    setError('');
-    setGeneratingIssueTc(true);
-    try {
-      const BATCH_SIZE = 5;
-      const issueBatches: { label: string; note: string }[][] = [];
-      for (let i = 0; i < issueItems.length; i += BATCH_SIZE) {
-        issueBatches.push(issueItems.slice(i, i + BATCH_SIZE));
-      }
-
-      let newResults: GeneratedTc[] = [];
-      const warnings: string[] = [];
-      for (let i = 0; i < issueBatches.length; i++) {
-        setGenerateIssueProgress(`TC 생성 중... (${i + 1}/${issueBatches.length}배치)`);
-        const result = await planAnalysisApi.generateSatisfiedTc(designText, issueBatches[i]);
-        if (result.testCases.length === 0 && result.warning) warnings.push(result.warning);
-        newResults = newResults.concat(
-          attributeSource(result.testCases, issueBatches[i], 1, 'consistency_issue', (item) => `${item.label}${item.note ? ` (근거: ${item.note})` : ''}`)
-        );
-      }
-      if (warnings.length > 0) {
-        setError(`AI가 일부 이슈의 TC를 만들지 못했습니다: ${warnings[0]}`);
-      }
-
-      const startIdx = testCases.length;
-      const updated = [...testCases, ...newResults];
-      setTestCases(updated);
-      setSelectedTcIdx((prev) => {
-        const next = new Set(prev);
-        for (let i = startIdx; i < updated.length; i++) next.add(i);
-        return next;
-      });
-      setSaveIssueTcMessage('');
-      persistState({ draftTestCases: updated });
-    } catch (err: any) {
-      setError(err.message || 'TC 생성 중 오류가 발생했습니다.');
-    } finally {
-      setGeneratingIssueTc(false);
-      setGenerateIssueProgress('');
-    }
-  }
-
   function toggleTc(idx: number) {
     setSelectedTcIdx((prev) => {
       const next = new Set(prev);
@@ -858,9 +842,8 @@ function handleExportIssuesExcel() {
     if (idxToSave.length === 0) return;
 
     const isRuleOnly = categories?.length === 1 && categories[0] === 'policy_rule';
-    const isIssueOnly = categories?.length === 1 && categories[0] === 'consistency_issue';
-    const setSavingFlag = isRuleOnly ? setSavingRuleTc : isIssueOnly ? setSavingIssueTc : setSaving;
-    const setMsg = isRuleOnly ? setSaveRuleTcMessage : isIssueOnly ? setSaveIssueTcMessage : setSaveMessage;
+    const setSavingFlag = isRuleOnly ? setSavingRuleTc : setSaving;
+    const setMsg = isRuleOnly ? setSaveRuleTcMessage : setSaveMessage;
 
     setError('');
     setMsg('');
@@ -1124,37 +1107,59 @@ function handleExportIssuesExcel() {
               {extractingRules ? '분석 중...' : '요구사항 정책·제한사항 분석'}
             </button>
             <p style={{ fontSize: 12, color: '#888', margin: '6px 0 0' }}>
-              요구사항 문서에만 있는 구체적인 조건·숫자·예외 규정을 찾아냅니다. 체크한 항목은 화면설계서가 이 규정대로 동작하는지 검증하는 TC로 만들어집니다.
+              요구사항 문서에만 있는 구체적인 조건·숫자·예외 규정을 찾아냅니다. "👍 맞음"으로 확인한 항목이 화면설계서가 이 규정대로 동작하는지 검증하는 TC로 만들어집니다.
             </p>
+            {rules.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '10px 0 8px' }}>
+                <span style={{ fontSize: 12, color: '#888' }}>빠른 선택:</span>
+                <button onClick={handleSelectAllRulesCorrect} style={{ fontSize: 12, padding: '2px 8px' }}>
+                  맞음 전체 선택
+                </button>
+                <button onClick={() => setSelectedRuleIdx(new Set(rules.map((_, idx) => idx)))} style={{ fontSize: 12, padding: '2px 8px' }}>
+                  전체 선택
+                </button>
+                <button onClick={() => setSelectedRuleIdx(new Set())} style={{ fontSize: 12, padding: '2px 8px' }}>
+                  전체 해제
+                </button>
+              </div>
+            )}
             {rules.length > 0 && (
               <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {rules.map((r, idx) => {
                   const isIncorrect = r.confirmed === 'incorrect';
                   return (
-                    <label
+                    <div
                       key={idx}
                       style={{
                         display: 'flex', gap: 8, alignItems: 'flex-start',
                         border: `1px solid ${isIncorrect ? '#e0e0e0' : '#e8dff5'}`,
                         background: isIncorrect ? '#f4f4f4' : '#faf7ff',
                         borderRadius: 6, padding: '8px 12px', fontSize: 13,
-                        cursor: isIncorrect ? 'default' : 'pointer',
                         opacity: isIncorrect ? 0.6 : 1,
                       }}
                     >
-                      <input
-                        type="checkbox"
-                        checked={selectedRuleIdx.has(idx)}
-                        onChange={() => toggleRule(idx)}
-                        disabled={isIncorrect}
-                        style={{ marginTop: 3 }}
-                      />
-                      <div>
-                        <p style={{ fontWeight: 500, margin: 0 }}>{r.summary}</p>
+                      <div style={{ flex: 1 }}>
+                        <p style={{ fontWeight: 500, margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          {r.summary}
+                          {r.needsReview && (
+                            <span style={{ background: '#fdf1e0', color: '#c77700', fontSize: 11, padding: '2px 8px', borderRadius: 4 }}>
+                              ⚠ 재검토 필요
+                            </span>
+                          )}
+                        </p>
                         {isIncorrect ? (
-                          <p style={{ color: '#c0392b', margin: '4px 0 0', fontSize: 12 }}>
-                            👎 틀림으로 표시됨 — TC 생성 대상에서 제외됐어요. 판단이 바뀌었다면 "틀림" 버튼을 다시 눌러 원래 내용을 확인하세요.
-                          </p>
+                          <>
+                            <p style={{ color: '#c0392b', margin: '4px 0 0', fontSize: 12 }}>
+                              👎 틀림으로 표시됨 — TC 생성 대상에서 자동으로 제외됐어요. 판단이 바뀌었다면 "틀림" 버튼을 다시 눌러 원래 내용을 확인하세요.
+                            </p>
+                            <input
+                              value={r.reasonNote || ''}
+                              onChange={(e) => setRuleReasonNote(idx, e.target.value)}
+                              onBlur={persistRuleReasonNote}
+                              placeholder="틀리다고 판단한 사유를 남겨주세요"
+                              style={{ width: '100%', fontSize: 12, padding: '4px 8px', marginTop: 6, boxSizing: 'border-box' }}
+                            />
+                          </>
                         ) : (
                           <>
                             <p style={{ color: '#888', margin: '4px 0 0', fontSize: 12 }}>근거: {r.source}</p>
@@ -1164,22 +1169,22 @@ function handleExportIssuesExcel() {
                             )}
                           </>
                         )}
-                      <div style={{ display: 'flex', gap: 6, marginTop: 6 }} onClick={(e) => e.preventDefault()}>
-                       <button
-                         onClick={() => setRuleConfirmed(idx, r.confirmed === 'correct' ? null : 'correct')}
-                         style={{ fontSize: 11, padding: '2px 8px', background: r.confirmed === 'correct' ? '#2a8f4d' : '#fff', color: r.confirmed === 'correct' ? '#fff' : '#333' }}
-                       >
-                       👍 맞음
-                       </button>
-                       <button
-                         onClick={() => setRuleConfirmed(idx, isIncorrect ? null : 'incorrect')}
-                         style={{ fontSize: 11, padding: '2px 8px', background: isIncorrect ? '#c0392b' : '#fff', color: isIncorrect ? '#fff' : '#333' }}
-                        >
-                       👎 틀림
-                        </button>
+                        <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                         <button
+                           onClick={() => setRuleConfirmed(idx, r.confirmed === 'correct' ? null : 'correct')}
+                           style={{ fontSize: 11, padding: '2px 8px', background: r.confirmed === 'correct' ? '#2a8f4d' : '#fff', color: r.confirmed === 'correct' ? '#fff' : '#333' }}
+                         >
+                         👍 맞음
+                         </button>
+                         <button
+                           onClick={() => setRuleConfirmed(idx, isIncorrect ? null : 'incorrect')}
+                           style={{ fontSize: 11, padding: '2px 8px', background: isIncorrect ? '#c0392b' : '#fff', color: isIncorrect ? '#fff' : '#333' }}
+                          >
+                         👎 틀림
+                          </button>
+                        </div>
                       </div>
-                      </div>
-                    </label>
+                    </div>
                   );
                 })}
               </div>
@@ -1281,7 +1286,7 @@ function handleExportIssuesExcel() {
               <div style={{ marginTop: 14 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
                   <p style={{ fontSize: 13, color: '#666', margin: 0 }}>
-                    총 {issues.length}건 발견 · TC 생성 대상 선택 {selectedIssueIdx.size}건
+                    발견된 이슈 {issues.length}건 · 확정 필요 {issues.filter((i) => !i.confirmedValue?.trim()).length}건 · 확정 완료 {issues.filter((i) => i.confirmedValue?.trim()).length}건
                   </p>
                   <button onClick={handleExportIssuesExcel} style={{ fontSize: 12, padding: '4px 10px' }}>
                     📥 엑셀로 다운로드
@@ -1299,16 +1304,10 @@ function handleExportIssuesExcel() {
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                         {items.map(({ issue, idx }) => (
-                          <label
+                          <div
                             key={idx}
-                            style={{ display: 'flex', gap: 10, alignItems: 'flex-start', border: `1px solid ${meta.color}`, borderRadius: 8, padding: 14, cursor: 'pointer' }}
+                            style={{ display: 'flex', gap: 10, alignItems: 'flex-start', border: `1px solid ${meta.color}`, borderRadius: 8, padding: 14 }}
                           >
-                            <input
-                              type="checkbox"
-                              checked={selectedIssueIdx.has(idx)}
-                              onChange={() => toggleIssue(idx)}
-                              style={{ marginTop: 3 }}
-                            />
                             <div style={{ flex: 1 }}>
                               <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>{issue.title}</div>
                               <div style={{ fontSize: 13, color: '#333', marginBottom: 8, background: '#f7f7f8', padding: '8px 10px', borderRadius: 6 }}>
@@ -1320,9 +1319,21 @@ function handleExportIssuesExcel() {
                               <div style={{ fontSize: 12.5, color: '#555', marginBottom: 3 }}>
                                 <b>화면설계서</b>: {issue.designContent}
                               </div>
-                              <div style={{ fontSize: 11.5, color: '#999' }}>위치: {issue.location}</div>
+                              <div style={{ fontSize: 11.5, color: '#999', marginBottom: 8 }}>위치: {issue.location}</div>
+
+                              <p style={{ fontSize: 12, color: '#888', margin: '0 0 4px' }}>확정값 입력</p>
+                              <input
+                                value={issue.confirmedValue || ''}
+                                onChange={(e) => updateIssueConfirmedValue(idx, e.target.value)}
+                                onBlur={persistIssueConfirmedValue}
+                                placeholder="실제 확정된 값을 입력하세요"
+                                style={{ width: '100%', fontSize: 13, padding: '6px 8px', boxSizing: 'border-box' }}
+                              />
+                              <p style={{ fontSize: 11, color: '#c77700', margin: '4px 0 0' }}>
+                                ⚠️ 이 확정값은 이 화면에만 기록되며, 요구사항 문서나 화면설계서 원본을 자동으로 바꾸지 않습니다. 원본 문서를 다시 확인하여 업데이트해주세요.
+                              </p>
                             </div>
-                          </label>
+                          </div>
                         ))}
                       </div>
                     </div>
@@ -1331,69 +1342,19 @@ function handleExportIssuesExcel() {
               </div>
             )}
 
-            {issues.length > 0 && (
-              <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px dashed #ddd' }}>
-                <button onClick={handleGenerateIssueTc} disabled={generatingIssueTc || selectedIssueIdx.size === 0}>
-                  {generatingIssueTc ? (generateIssueProgress || 'TC 생성 중...') : `선택한 ${selectedIssueIdx.size}개 이슈로 TC 생성`}
-                </button>
-                {error && (
-                  <div style={{ background: '#fdecea', color: '#a33', padding: '8px 12px', borderRadius: 6, marginTop: 10, fontSize: 13 }}>
-                    {error}
-                  </div>
-                )}
-
-                {(() => {
-                  const issueTcEntries = testCases
-                    .map((tc, idx) => ({ tc, idx }))
-                    .filter(({ tc }) => tc.source_category === 'consistency_issue');
-                  if (issueTcEntries.length === 0) return null;
-                  const unsavedCount = issueTcEntries.filter(({ idx }) => selectedTcIdx.has(idx) && !savedTcIdx.has(idx)).length;
-                  return (
-                    <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <button onClick={() => handleSaveTestCases(['consistency_issue'])} disabled={savingIssueTc || unsavedCount === 0}>
-                          {savingIssueTc ? '저장 중...' : `선택한 ${unsavedCount}개를 Test Case에 저장`}
-                        </button>
-                        {saveIssueTcMessage && <span style={{ fontSize: 13, color: '#2a8f4d' }}>{saveIssueTcMessage}</span>}
-                      </div>
-                      {issueTcEntries.map(({ tc, idx }) => {
-                        const stepLines = tc.steps.split('\n').filter(Boolean);
-                        const isSaved = savedTcIdx.has(idx);
-                        return (
-                          <div key={idx} style={{ border: '1px solid #ddd', borderRadius: 8, padding: '16px 18px', background: isSaved ? '#f7f7f7' : '#fff', display: 'flex', gap: 12, opacity: isSaved ? 0.7 : 1 }}>
-                            <input type="checkbox" checked={selectedTcIdx.has(idx)} onChange={() => toggleTc(idx)} disabled={isSaved} style={{ marginTop: 4 }} />
-                            <div style={{ flex: 1 }}>
-                              <div style={{ marginBottom: 12 }}>
-                                <span style={{ background: '#fdf1e0', color: '#c77700', fontSize: 12, padding: '3px 10px', borderRadius: 4, marginRight: 8 }}>{tc.priority}</span>
-                                {tc.source_category && (
-                                  <span style={{ background: '#f2f2f2', color: SOURCE_CATEGORY_META[tc.source_category].color, fontSize: 11.5, padding: '3px 10px', borderRadius: 4, marginRight: 8 }}>
-                                    {SOURCE_CATEGORY_META[tc.source_category].label}
-                                  </span>
-                                )}
-                                {isSaved && <span style={{ background: '#eee', color: '#888', fontSize: 12, padding: '3px 10px', borderRadius: 4, marginRight: 8 }}>저장됨</span>}
-                                <span style={{ fontSize: 15, fontWeight: 600 }}>{tc.title}</span>
-                              </div>
-                              {tc.source_snippet && (
-                                <p style={{ fontSize: 12, color: '#888', margin: '0 0 10px', background: '#fafafa', border: '1px solid #eee', borderRadius: 4, padding: '6px 10px' }}>
-                                  📎 근거: {tc.source_snippet}
-                                </p>
-                              )}
-                              <p style={{ fontSize: 12, color: '#999', margin: '0 0 4px' }}>사전조건</p>
-                              <p style={{ fontSize: 14, color: '#333', margin: '0 0 14px' }}>{tc.precondition}</p>
-                              <p style={{ fontSize: 12, color: '#999', margin: '0 0 4px' }}>테스트 절차</p>
-                              <div style={{ fontSize: 14, color: '#333', margin: '0 0 14px', lineHeight: 1.8 }}>
-                                {stepLines.map((line, i) => (<div key={i}>{line}</div>))}
-                              </div>
-                              <p style={{ fontSize: 12, color: '#999', margin: '0 0 4px' }}>기대 결과</p>
-                              <p style={{ fontSize: 14, color: '#333', margin: 0 }}>{tc.expected_result}</p>
-                            </div>
-                          </div>
-                        );
-                      })}
+            {resolvedIssues.length > 0 && (
+              <details style={{ marginTop: 16, paddingTop: 14, borderTop: '1px dashed #ddd' }}>
+                <summary style={{ fontSize: 13, color: '#2a8f4d', cursor: 'pointer', fontWeight: 600 }}>
+                  ✅ 해결됨 ({resolvedIssues.length}건) — 이전 검수에는 있었지만 이번엔 발견되지 않은 이슈
+                </summary>
+                <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {resolvedIssues.map((issue, idx) => (
+                    <div key={idx} style={{ border: '1px solid #d8ecd8', background: '#f6fbf6', borderRadius: 6, padding: '8px 12px', fontSize: 12.5, color: '#555' }}>
+                      {issue.title}
                     </div>
-                  );
-                })()}
-              </div>
+                  ))}
+                </div>
+              </details>
             )}
           </div>
         )}
@@ -1423,7 +1384,7 @@ function handleExportIssuesExcel() {
             {checklist.length > 0 && (
               <>
                 <div style={{ marginTop: 12, marginBottom: 8, fontSize: 12, color: '#888', background: '#fafafa', border: '1px solid #eee', borderRadius: 6, padding: '8px 12px' }}>
-                  <b>충족</b> = 화면설계서에 명시됨 (체크하면 "문서대로 실제 동작하는지" 검증하는 TC 생성) · <b>누락 의심</b> = 체크리스트 기준으로 봤을 때 화면설계서에 언급이 없어 TC 생성 대상 (각 항목에 마우스를 올리면 판단 근거가 보입니다)
+                  <b>충족</b> = 화면설계서에 명시됨 (체크하면 "문서대로 실제 동작하는지" 검증하는 TC 생성) · <b>누락 의심</b> = 체크리스트 기준으로 봤을 때 화면설계서에 언급이 없어 TC 생성 대상 (각 항목의 "근거 보기"를 눌러 판단 근거를 확인할 수 있습니다)
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
@@ -1470,42 +1431,54 @@ function handleExportIssuesExcel() {
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {checklist.map((item) => (
-                    <label
-                      key={item.label}
-                      title={item.note}
-                      style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        border: '1px solid #eee',
-                        borderRadius: 6,
-                        padding: '8px 12px',
-                        fontSize: 13,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {item.missing ? (
-                          <input
-                            type="checkbox"
-                            checked={selectedGaps.has(item.label)}
-                            onChange={() => toggleGap(item.label)}
-                          />
-                        ) : (
-                          <input
-                            type="checkbox"
-                            checked={selectedSatisfied.has(item.label)}
-                            onChange={() => toggleSatisfied(item.label)}
-                          />
+                  {checklist.map((item) => {
+                    const isExpanded = expandedChecklist.has(item.label);
+                    const prevMissing = checklistChanges[item.label];
+                    const changed = prevMissing !== undefined;
+                    return (
+                      <div key={item.label} style={{ border: '1px solid #eee', borderRadius: 6, padding: '8px 12px', fontSize: 13 }}>
+                        <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            {item.missing ? (
+                              <input
+                                type="checkbox"
+                                checked={selectedGaps.has(item.label)}
+                                onChange={() => toggleGap(item.label)}
+                              />
+                            ) : (
+                              <input
+                                type="checkbox"
+                                checked={selectedSatisfied.has(item.label)}
+                                onChange={() => toggleSatisfied(item.label)}
+                              />
+                            )}
+                            {item.label}
+                            {changed && (
+                              <span style={{ background: '#fdf1e0', color: '#c77700', fontSize: 11, padding: '2px 8px', borderRadius: 4 }}>
+                                변경됨: 이전 {prevMissing ? '누락 의심' : '충족'} → 현재 {item.missing ? '누락 의심' : '충족'}
+                              </span>
+                            )}
+                          </span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <span style={{ color: item.missing ? '#c77700' : '#2a8f4d', fontSize: 12 }}>
+                              {item.status}
+                            </span>
+                            <button
+                              onClick={(e) => { e.preventDefault(); toggleChecklistExpand(item.label); }}
+                              style={{ fontSize: 11, padding: '2px 8px' }}
+                            >
+                              {isExpanded ? '근거 접기' : '근거 보기'}
+                            </button>
+                          </span>
+                        </label>
+                        {isExpanded && (
+                          <p style={{ fontSize: 12, color: '#666', margin: '8px 0 0', paddingTop: 8, borderTop: '1px dashed #eee' }}>
+                            {item.note}
+                          </p>
                         )}
-                        {item.label}
-                      </span>
-                      <span style={{ color: item.missing ? '#c77700' : '#2a8f4d', fontSize: 12 }}>
-                        {item.status}
-                      </span>
-                    </label>
-                  ))}
+                      </div>
+                    );
+                  })}
                 </div>
               </>
             )}
