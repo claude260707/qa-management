@@ -14,6 +14,7 @@ function mapPriorityToCode(korean: string): 'minor' | 'major' | 'critical' {
 
 interface PlanAnalysisScreenProps {
   embeddedProjectId: number;
+  onStepChange?: (label: string) => void;
 }
 
 interface RequirementFile {
@@ -111,7 +112,7 @@ const TAB_CONFIG: { key: PlanAnalysisTab; label: string }[] = [
   { key: 'basic', label: '⑤ 기본 기능 TC' },
 ];
 
-export default function PlanAnalysisScreen({ embeddedProjectId }: PlanAnalysisScreenProps) {
+export default function PlanAnalysisScreen({ embeddedProjectId, onStepChange }: PlanAnalysisScreenProps) {
   // --- 섹션 1: 요구사항 문서 (RFP/제안서/요구사항 정의서 등, 여러 개 업로드 가능) ---
   const [requirementFiles, setRequirementFiles] = useState<RequirementFile[]>([]);
   const [extractingRequirement, setExtractingRequirement] = useState(false);
@@ -194,6 +195,13 @@ export default function PlanAnalysisScreen({ embeddedProjectId }: PlanAnalysisSc
   const [error, setError] = useState('');
   const [restoringState, setRestoringState] = useState(true);
   const [activeTab, setActiveTab] = useState<PlanAnalysisTab>('type');
+
+  // 현재 단계(①~⑤)가 바뀔 때마다 상위(프로젝트 상세 화면)에 라벨을 알려 breadcrumb에 반영
+  useEffect(() => {
+    const label = TAB_CONFIG.find((t) => t.key === activeTab)?.label || '';
+    onStepChange?.(label);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   // 프로젝트를 열 때 이전에 저장해둔 분석 상태를 복구.
   // 체크박스 선택 상태는 의도적으로 복구 대상에서 제외 (저장 전 임시값이라 큰 의미 없음).

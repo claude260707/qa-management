@@ -4,6 +4,7 @@ import { STATUS_LABEL } from './types';
 import { projectsApi } from './api';
 import TestCasesScreen from './TestCasesScreen';
 import PlanAnalysisScreen from './PlanAnalysisScreen';
+import Breadcrumb from './Breadcrumb';
 import './ProjectDetailScreen.css';
 
 type DetailTab = 'planAnalysis' | 'testcases';
@@ -22,11 +23,13 @@ export default function ProjectDetailScreen({ projectId, onBack }: { projectId: 
   const [tab, setTab] = useState<DetailTab>('planAnalysis');
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
+  const [planStepLabel, setPlanStepLabel] = useState('');
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setTab('planAnalysis');
+    setPlanStepLabel('');
     projectsApi.get(projectId).then((p) => {
       if (cancelled) return;
       setProject(p);
@@ -61,6 +64,15 @@ export default function ProjectDetailScreen({ projectId, onBack }: { projectId: 
 
   return (
     <div className="pd-screen">
+      <Breadcrumb
+        items={[
+          { label: '프로젝트 관리', onClick: onBack },
+          { label: project.name },
+          ...(tab === 'testcases'
+            ? [{ label: 'Test Case' }]
+            : [{ label: '기획 자료 분석' }, ...(planStepLabel ? [{ label: planStepLabel }] : [])]),
+        ]}
+      />
       <button className="pd-back" onClick={onBack}>← 프로젝트 목록으로</button>
 
       <header className="pd-header">
@@ -92,7 +104,7 @@ export default function ProjectDetailScreen({ projectId, onBack }: { projectId: 
       </div>
 
       <div style={{ display: tab === 'planAnalysis' ? 'block' : 'none' }}>
-        <PlanAnalysisScreen embeddedProjectId={projectId} />
+        <PlanAnalysisScreen embeddedProjectId={projectId} onStepChange={setPlanStepLabel} />
       </div>
       {tab === 'testcases' && <TestCasesScreen embeddedProjectId={projectId} />}
     </div>

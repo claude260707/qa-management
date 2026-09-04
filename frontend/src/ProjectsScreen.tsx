@@ -3,6 +3,7 @@ import type { Project, ProjectInput, ProjectStatus } from './types';
 import { STATUS_LABEL, STATUS_STAGE_ORDER } from './types';
 import { projectsApi } from './api';
 import ProjectModal from './ProjectModal';
+import Breadcrumb from './Breadcrumb';
 import './ProjectsScreen.css';
 
 
@@ -13,7 +14,7 @@ function formatDate(d: string | null) {
   return d.slice(0, 10);
 }
 
-export default function ProjectsScreen({ onOpenDetail }: { onOpenDetail: (id: number) => void }) {
+export default function ProjectsScreen({ onOpenDetail, onProjectsChanged }: { onOpenDetail: (id: number) => void; onProjectsChanged?: () => void }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -63,16 +64,19 @@ export default function ProjectsScreen({ onOpenDetail }: { onOpenDetail: (id: nu
     setModalOpen(false);
     setEditing(null);
     await load();
+    onProjectsChanged?.();
   }
 
   async function handleDelete(p: Project) {
     if (!confirm(`"${p.name}" 프로젝트를 삭제할까요? 되돌릴 수 없습니다.`)) return;
     await projectsApi.remove(p.id);
     await load();
+    onProjectsChanged?.();
   }
 
   return (
     <div className="projects-screen">
+      <Breadcrumb items={[{ label: '프로젝트 관리' }, { label: '프로젝트 목록' }]} />
       <header className="screen-header">
         <div>
           <h1>프로젝트 관리</h1>
