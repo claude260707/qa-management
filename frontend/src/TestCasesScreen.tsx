@@ -6,6 +6,7 @@ import { projectsApi, requirementsApi, testCasesApi, attachmentsApi } from './ap
 import TestCaseModal from './TestCaseModal';
 import RequirementModal from './RequirementModal';
 import TestCaseBulkUploadModal from './TestCaseBulkUploadModal';
+import DailyReportScreen from './DailyReportScreen';
 import './TestCasesScreen.css';
 
 function buildBatchPrompt(items: TestCase[]) {
@@ -113,6 +114,7 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
   const [bulkTcParsed, setBulkTcParsed] = useState<TestCaseBulkItem[]>([]);
   const [bulkTcChecked, setBulkTcChecked] = useState<Set<number>>(new Set());
   const [bulkTcMsg, setBulkTcMsg] = useState<string | null>(null);
+  const [dailyReportOpen, setDailyReportOpen] = useState(false);
   
 
   function toggleSelected(id: number) {
@@ -404,6 +406,32 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
           <span style={{ fontSize: 13, color: 'var(--text-sub, #666)', flexShrink: 0 }}>진행률 (통과 기준)</span>
           <div className="progress-track"><div className="progress-fill" style={{ width: `${summary.passRate}%` }} /></div>
           <span className="progress-value">{summary.passRate}%</span>
+        </div>
+
+        <div style={{ marginBottom: 20, border: '1px solid var(--border, #e5e5e5)', borderRadius: 8, overflow: 'hidden' }}>
+          <button
+            onClick={() => setDailyReportOpen((prev) => !prev)}
+            style={{
+              width: '100%',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '10px 16px',
+              background: 'var(--bg-subtle, #fafafa)',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 13,
+              fontWeight: 600,
+            }}
+          >
+            <span>📊 데일리 리포트</span>
+            <span>{dailyReportOpen ? '접기 ▲' : '펼치기 ▼'}</span>
+          </button>
+          {dailyReportOpen && projectId && (
+            <div style={{ padding: 16 }}>
+              <DailyReportScreen projectId={projectId} />
+            </div>
+          )}
         </div>
 
           {/* 신규 - Sign-off 기준 가이드 패널 */}

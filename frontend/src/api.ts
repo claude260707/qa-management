@@ -13,6 +13,8 @@ async function handle(res: Response) {
 }
 
 export const projectsApi = {
+  advanceRound: (id: number): Promise<Project> =>
+    fetch(`${BASE_URL}/projects/${id}/advance-round`, { method: 'PUT' }).then(handle),
   list: (params?: { status?: string; keyword?: string }): Promise<Project[]> => {
     const qs = new URLSearchParams();
     if (params?.status && params.status !== 'all') qs.set('status', params.status);
@@ -20,6 +22,7 @@ export const projectsApi = {
     const query = qs.toString();
     return fetch(`${BASE_URL}/projects${query ? `?${query}` : ''}`).then(handle);
   },
+
 
   get: (id: number): Promise<Project> =>
     fetch(`${BASE_URL}/projects/${id}`).then(handle),
@@ -113,7 +116,6 @@ export const testCasesApi = {
     const query = qs.toString();
     return fetch(`${BASE_URL}/test-cases${query ? `?${query}` : ''}`).then(handle);
   },
-
   coverage: (projectId: number): Promise<RequirementCoverage[]> =>
     fetch(`${BASE_URL}/test-cases/coverage?project_id=${projectId}`).then(handle),
 
@@ -204,6 +206,58 @@ export const releasesApi = {
     fetch(`${BASE_URL}/releases/${id}`, { method: 'DELETE' }).then(handle),
 };
 
+
+
+// 파일 하단, testCasesApi 근처에 신규 객체로 추가
+export interface StatusCounts {
+  not_run?: number;
+  pass?: number;
+  fail?: number;
+  blocked?: number;
+  n_a?: number;
+  n_t?: number;
+}
+
+export interface DailySnapshot {
+  total: number;
+  by_status: StatusCounts;
+  by_executor: { automated: StatusCounts; manual: StatusCounts };
+}
+
+export interface DailyReportResponse {
+  round: number | null;
+  date?: string;
+  message?: string;
+  today?: DailySnapshot;
+  yesterday?: DailySnapshot;
+}
+
+
+export interface DailyReportDetail {
+  rounds: number[];
+  roundSummary: Record<number, StatusCounts>;
+  testCases: {
+    id: number;
+    title: string;
+    priority: string;
+    byRound: Record<number, string>;
+    latestExecutor: string | null;
+    latestNote: string | null;
+  }[];
+}
+
+export const dailyReportApi = {
+  get: (projectId: number, params?: { date?: string; round?: number }): Promise<DailyReportResponse> => {
+    const qs = new URLSearchParams({ project_id: String(projectId) });
+    if (params?.date) qs.set('date', params.date);
+    if (params?.round) qs.set('round', String(params.round));
+    return fetch(`${BASE_URL}/daily-report?${qs.toString()}`).then(handle);
+  },
+  getDetail: (projectId: number): Promise<DailyReportDetail> =>
+    fetch(`${BASE_URL}/daily-report/detail?project_id=${projectId}`).then(handle),
+};
+
+
 export const planAnalysisApi = {
   classifyType: (planText: string): Promise<{ type: string; confidence: number | null; reason: string; serviceName: string }> =>
     fetch(`${BASE_URL}/plan/classify-type`, {
@@ -226,6 +280,7 @@ export const planAnalysisApi = {
     selectedFeatureNames: string[]
   ): Promise<{
     testCases: { title: string; priority: string; precondition: string; steps: string; expected_result: string }[];
+    warning?: string;
   }> =>
     fetch(`${BASE_URL}/plan/generate-basic-tc`, {
       method: 'POST',
@@ -259,6 +314,7 @@ export const planAnalysisApi = {
     extractedRules: { summary: string; source: string; risk: string; verify: string }[] = []
   ): Promise<{
     testCases: { title: string; priority: string; precondition: string; steps: string; expected_result: string }[];
+    warning?: string;
   }> =>
     fetch(`${BASE_URL}/plan/generate-tc`, {
       method: 'POST',
@@ -271,6 +327,7 @@ export const planAnalysisApi = {
     selectedItems: { label: string; note: string }[]
   ): Promise<{
     testCases: { title: string; priority: string; precondition: string; steps: string; expected_result: string }[];
+    warning?: string;
   }> =>
     fetch(`${BASE_URL}/plan/generate-satisfied-tc`, {
       method: 'POST',
@@ -297,6 +354,26 @@ export const planAnalysisApi = {
       location: string;
       question: string;
     }[];
+    draftTestCases: {
+      title: string;
+      priority: string;
+      precondition: string;
+      steps: string;
+      expected_result: string;
+      source_category?: string;
+      source_snippet?: string;
+    }[];
+    draftBasicTestCases: {
+      title: string;
+      priority: string;
+      precondition: string;
+      steps: string;
+      expected_result: string;
+      source_category?: string;
+      source_snippet?: string;
+    }[];
+    savedTcIdx: number[];
+    savedBasicTcIdx: number[];
   }> =>
     fetch(`${BASE_URL}/plan/state/${projectId}`).then(handle),
 
@@ -321,6 +398,26 @@ export const planAnalysisApi = {
         location: string;
         question: string;
       }[];
+      draftTestCases: {
+        title: string;
+        priority: string;
+        precondition: string;
+        steps: string;
+        expected_result: string;
+        source_category?: string;
+        source_snippet?: string;
+      }[];
+      draftBasicTestCases: {
+        title: string;
+        priority: string;
+        precondition: string;
+        steps: string;
+        expected_result: string;
+        source_category?: string;
+        source_snippet?: string;
+      }[];
+      savedTcIdx: number[];
+      savedBasicTcIdx: number[];
     }>
   ): Promise<{ ok: boolean }> =>
     fetch(`${BASE_URL}/plan/state/${projectId}`, {
@@ -351,4 +448,3 @@ export const planAnalysisApi = {
     body: JSON.stringify({ requirementFiles, designText })
   }).then(handle),
 };
-

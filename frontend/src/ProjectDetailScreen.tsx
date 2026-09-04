@@ -35,6 +35,21 @@ export default function ProjectDetailScreen({ projectId, onBack }: { projectId: 
     return () => { cancelled = true; };
   }, [projectId]);
 
+  async function handleAdvanceRound() {
+    if (!project) return;
+    const confirmed = window.confirm(
+      `${project.current_round}차를 종료하고 ${project.current_round + 1}차를 시작할까요?\n(기존 TC 실행 이력은 보존되고, 이후 저장되는 결과부터 새 차수로 기록됩니다.)`
+    );
+    if (!confirmed) return;
+    try {
+      const updated = await projectsApi.advanceRound(project.id);
+      setProject(updated);
+    } catch (err) {
+      console.error(err);
+      alert('차수 진행에 실패했습니다.');
+    }
+  }
+
   if (loading || !project) {
     return (
       <div className="pd-screen">
@@ -52,6 +67,9 @@ export default function ProjectDetailScreen({ projectId, onBack }: { projectId: 
         <div className="pd-header-top">
           <span className={`status-pill status-${project.status}`}>{STATUS_LABEL[project.status]}</span>
           <h1>{project.name}</h1>
+          <button className="round-advance-btn" onClick={handleAdvanceRound}>
+            {project.current_round}차 진행 중 · 다음 차수 시작
+          </button>
         </div>
         {project.description && <p className="pd-description">{project.description}</p>}
 

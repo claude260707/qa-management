@@ -14,7 +14,9 @@ const {
   buildFeatureExtractionPrompt,
   parseFeatureExtractionResult,
   buildBasicTcGenerationPrompt,
+  buildRequirementChecklistPrompt,
   parseRequirementChecklistResult,
+  buildTcGenerationPrompt,
   buildSatisfiedRuleVerificationPrompt,
   parseTcGenerationResult,
   buildRequirementDocBlock,
@@ -47,14 +49,28 @@ function loadSkillMd(type) {
 // 매번 달라지는 지시문 블록은 맨 뒤에 캐시 없이 붙는다.
 // (Anthropic 캐싱은 "접두사" 단위로 동작하므로, 캐시 블록들의 순서/내용이
 //  이전 호출과 동일해야 캐시가 적중한다 — 순서를 바꾸면 안 됨)
+
 async function callClaude(contentBlocks, { model = 'claude-sonnet-5', maxTokens = 4000, label = '' } = {}) {
   const stream = await anthropic.messages.stream({
     model,
     max_tokens: maxTokens,
+    thinking: { type: 'disabled' },
     messages: [{ role: 'user', content: contentBlocks }],
   });
 
   const res = await stream.finalMessage();
+
+  console.log(`=== [${label}] stop_reason: ${res.stop_reason}, block_types: ${res.content.map((b) => b.type).join(',')}, usage: ${JSON.stringify(res.usage)} ===`);
+
+  // max_tokens에 걸려 응답이 중간에 잘린 경우: 깨진 JSON을 그대로 파싱 시도하면
+  // "결과가 비어있음/생성 안 됨"처럼 보이는 조용한 실패로 이어지므로, 여기서 바로 명확한 에러로 처리.
+  if (res.stop_reason === 'max_tokens') {
+    const err = new Error(
+      `[${label}] 응답이 max_tokens(${maxTokens}) 한도에 걸려 중간에 잘렸습니다. maxTokens를 늘리거나 입력 범위를 줄여주세요.`
+    );
+    err.isTruncated = true;
+    throw err;
+  }
 
   return res.content
     .filter((block) => block.type === 'text')
@@ -74,7 +90,7 @@ router.post('/extract-features', async (req, res) => {
     res.json({ features });
   } catch (err) {
     console.error('extract-features error:', err);
-    res.status(500).json({ error: '기능 목록 추출 중 오류가 발생했습니다.' });
+    res.status(500).json({ error: err.isTruncated ? err.message : '기능 목록 추출 중 오류가 발생했습니다.' });
   }
 });
 
@@ -89,10 +105,18 @@ router.post('/generate-basic-tc', async (req, res) => {
     const blocks = [buildPlanTextBlock(planText), { type: 'text', text: buildBasicTcGenerationPrompt(selectedFeatureNames) }];
     const raw = await callClaude(blocks, { maxTokens: 8000, label: 'generate-basic-tc' });
     const testCases = parseTcGenerationResult(raw);
-    res.json({ testCases });
+    let warning;
+    if (testCases.length === 0 && raw.length > 0) {
+      // AI가 형식을 안 지켰거나(드묾), 근거 부족 등으로 TC 생성을 거부한 경우(자주 있음) 둘 다 여기 해당.
+      // 조용히 빈 배열만 내려주면 사용자는 아무 반응이 없는 것처럼 보이므로, AI의 답변을 그대로 사용자에게 보여준다.
+      console.warn(`[TC 파싱 0건] 응답 미리보기(앞 1500자):
+${raw.slice(0, 1500)}`);
+      warning = raw.slice(0, 800);
+    }
+    res.json({ testCases, warning });
   } catch (err) {
     console.error('generate-basic-tc error:', err);
-    res.status(500).json({ error: '기본 기능 TC 생성 중 오류가 발생했습니다.' });
+    res.status(500).json({ error: err.isTruncated ? err.message : '기본 기능 TC 생성 중 오류가 발생했습니다.' });
   }
 });
 
@@ -108,7 +132,7 @@ router.post('/classify-type', async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('classify-type error:', err);
-    res.status(500).json({ error: '유형 판별 중 오류가 발생했습니다.' });
+    res.status(500).json({ error: err.isTruncated ? err.message : '유형 판별 중 오류가 발생했습니다.' });
   }
 });
 
@@ -124,7 +148,7 @@ router.post('/extract-rules', async (req, res) => {
     res.json({ rules });
   } catch (err) {
     console.error('extract-rules error:', err);
-    res.status(500).json({ error: '규칙 추출 중 오류가 발생했습니다.' });
+    res.status(500).json({ error: err.isTruncated ? err.message : '규칙 추출 중 오류가 발생했습니다.' });
   }
 });
 
@@ -141,12 +165,13 @@ router.post('/checklist', async (req, res) => {
     // generate-tc 호출도 같은 순서/내용의 기획서+체크리스트 블록을 쓰므로, 같은 세션이면 캐시가 이어서 적중한다.
     const blocks = [buildPlanTextBlock(planText)];
     if (skillMd) blocks.push(buildSkillMdBlock(skillMd));
-    const raw = await callClaude(blocks, { label: 'checklist' });
+    blocks.push({ type: 'text', text: buildRequirementChecklistPrompt() });
+    const raw = await callClaude(blocks, { maxTokens: 8000, label: 'checklist' });
     const items = parseRequirementChecklistResult(raw);
     res.json({ items });
   } catch (err) {
     console.error('checklist error:', err);
-    res.status(500).json({ error: '체크리스트 생성 중 오류가 발생했습니다.' });
+    res.status(500).json({ error: err.isTruncated ? err.message : '체크리스트 생성 중 오류가 발생했습니다.' });
   }
 });
 
@@ -163,12 +188,21 @@ router.post('/generate-tc', async (req, res) => {
     const skillMd = loadSkillMd(projectType);
     const blocks = [buildPlanTextBlock(planText)];
     if (skillMd) blocks.push(buildSkillMdBlock(skillMd));
+    blocks.push({ type: 'text', text: buildTcGenerationPrompt(selectedGapLabels) });
     const raw = await callClaude(blocks, { maxTokens: 8000, label: 'generate-tc' });
     const testCases = parseTcGenerationResult(raw);
-    res.json({ testCases });
+    let warning;
+    if (testCases.length === 0 && raw.length > 0) {
+      // AI가 형식을 안 지켰거나(드묾), 근거 부족 등으로 TC 생성을 거부한 경우(자주 있음) 둘 다 여기 해당.
+      // 조용히 빈 배열만 내려주면 사용자는 아무 반응이 없는 것처럼 보이므로, AI의 답변을 그대로 사용자에게 보여준다.
+      console.warn(`[TC 파싱 0건] 응답 미리보기(앞 1500자):
+${raw.slice(0, 1500)}`);
+      warning = raw.slice(0, 800);
+    }
+    res.json({ testCases, warning });
   } catch (err) {
     console.error('generate-tc error:', err);
-    res.status(500).json({ error: 'TC 생성 중 오류가 발생했습니다.' });
+    res.status(500).json({ error: err.isTruncated ? err.message : 'TC 생성 중 오류가 발생했습니다.' });
   }
 });
 
@@ -183,10 +217,18 @@ router.post('/generate-satisfied-tc', async (req, res) => {
     const blocks = [buildPlanTextBlock(planText), { type: 'text', text: buildSatisfiedRuleVerificationPrompt(selectedItems) }];
     const raw = await callClaude(blocks, { maxTokens: 8000, label: 'generate-satisfied-tc' });
     const testCases = parseTcGenerationResult(raw);
-    res.json({ testCases });
+    let warning;
+    if (testCases.length === 0 && raw.length > 0) {
+      // AI가 형식을 안 지켰거나(드묾), 근거 부족 등으로 TC 생성을 거부한 경우(자주 있음) 둘 다 여기 해당.
+      // 조용히 빈 배열만 내려주면 사용자는 아무 반응이 없는 것처럼 보이므로, AI의 답변을 그대로 사용자에게 보여준다.
+      console.warn(`[TC 파싱 0건] 응답 미리보기(앞 1500자):
+${raw.slice(0, 1500)}`);
+      warning = raw.slice(0, 800);
+    }
+    res.json({ testCases, warning });
   } catch (err) {
     console.error('generate-satisfied-tc error:', err);
-    res.status(500).json({ error: '충족 항목 검증 TC 생성 중 오류가 발생했습니다.' });
+    res.status(500).json({ error: err.isTruncated ? err.message : '충족 항목 검증 TC 생성 중 오류가 발생했습니다.' });
   }
 });
 
@@ -210,6 +252,10 @@ router.get('/state/:projectId', async (req, res) => {
         checklist: [],
         features: [],
         consistencyIssues: [],
+        draftTestCases: [],
+        draftBasicTestCases: [],
+        savedTcIdx: [],
+        savedBasicTcIdx: [],
       });
     }
     const row = result.rows[0];
@@ -224,6 +270,10 @@ router.get('/state/:projectId', async (req, res) => {
       checklist: row.checklist || [],
       features: row.features || [],
       consistencyIssues: row.consistency_issues || [],
+      draftTestCases: row.draft_test_cases || [],
+      draftBasicTestCases: row.draft_basic_test_cases || [],
+      savedTcIdx: row.saved_tc_idx || [],
+      savedBasicTcIdx: row.saved_basic_tc_idx || [],
     });
   } catch (err) {
     console.error('get plan-analysis state error:', err);
@@ -237,14 +287,15 @@ router.put('/state/:projectId', async (req, res) => {
     const {
       requirementFiles, designText, designFileName,
       projectType, reason, serviceName, rules, checklist, features, consistencyIssues,
+      draftTestCases, draftBasicTestCases, savedTcIdx, savedBasicTcIdx,
     } = req.body;
 
     await pool.query(
       `INSERT INTO project_plan_analysis
         (project_id, requirement_files, design_text, design_file_name,
          project_type, classification_reason, service_name, rules, checklist, features,
-         consistency_issues, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+         consistency_issues, draft_test_cases, draft_basic_test_cases, saved_tc_idx, saved_basic_tc_idx, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, NOW())
        ON CONFLICT (project_id) DO UPDATE SET
         requirement_files = EXCLUDED.requirement_files,
         design_text = EXCLUDED.design_text,
@@ -256,6 +307,10 @@ router.put('/state/:projectId', async (req, res) => {
         checklist = EXCLUDED.checklist,
         features = EXCLUDED.features,
         consistency_issues = EXCLUDED.consistency_issues,
+        draft_test_cases = EXCLUDED.draft_test_cases,
+        draft_basic_test_cases = EXCLUDED.draft_basic_test_cases,
+        saved_tc_idx = EXCLUDED.saved_tc_idx,
+        saved_basic_tc_idx = EXCLUDED.saved_basic_tc_idx,
         updated_at = NOW()`,
       [
         req.params.projectId,
@@ -269,6 +324,10 @@ router.put('/state/:projectId', async (req, res) => {
         JSON.stringify(checklist || []),
         JSON.stringify(features || []),
         JSON.stringify(consistencyIssues || []),
+        JSON.stringify(draftTestCases || []),
+        JSON.stringify(draftBasicTestCases || []),
+        JSON.stringify(savedTcIdx || []),
+        JSON.stringify(savedBasicTcIdx || []),
       ]
     );
     res.json({ ok: true });

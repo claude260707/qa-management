@@ -340,11 +340,19 @@ function buildSatisfiedRuleVerificationPrompt(selectedItems) {
 - 기대 결과는 테스터가 실제로 확인 가능한 것만 적어줘: 화면에 보이는 메시지/상태,
   또는 API 응답의 상태코드나 본문 내용.
 
+매우 중요 - 화면설계서에 해당 항목을 검증할 화면 자체가 없는 경우:
+절대 항목을 건너뛰거나 TC 생성을 거부하지 마. 대신 아래처럼 "확인 필요" TC로 만들어줘:
+[TITLE]에 "[확인 필요] " 접두사를 붙이고, [PRECONDITION]과 [STEPS]에는 "화면설계서에서
+이 규칙과 관련된 화면을 찾을 수 없음"이라고 명시하고, [EXPECTED]에는 "해당 화면(또는 별도
+문서)을 추가로 확인해서 이 규칙이 실제로 지켜지는지 검증 필요"라고 적어줘. 근거 없이 숫자나
+조건을 지어내지는 말되, 각 항목마다 반드시 TC 형식의 출력은 하나씩 내놓아야 해.
+
 --- 검증 대상 (체크리스트에서 "충족"으로 판정된 항목) ---
 ${itemList}
 ---
 
-중요: 각 TC마다 아래 형식으로, 개수만큼 반복해서 답변해줘. 다른 설명은 절대 붙이지 마.
+중요: 각 항목마다 정확히 1개씩, 아래 형식으로 빠짐없이 답변해줘 (화면을 못 찾은 항목도
+위 지침대로 "확인 필요" TC로 반드시 포함). 다른 설명은 절대 붙이지 마.
 [TC_START]
 [TITLE]: (TC 제목)
 [PRIORITY]: 높음 또는 중간 또는 낮음
@@ -375,11 +383,6 @@ function buildRequirementDocBlockPerFile(fileName, text) {
     text: `[요구사항 문서: ${fileName}]\n${text}`,
   };
 }
-
-module.exports = {
-  // ...기존 export들
-  buildRequirementDocBlockPerFile,
-};
 
 /**
  * 신규 - 정합성 검수: 화면설계서 문서 블록 (캐시 가능, 요구사항 블록 뒤에 이어붙임)
@@ -493,4 +496,5 @@ module.exports = {
   buildTcGenerationPrompt,
   buildSatisfiedRuleVerificationPrompt,
   parseTcGenerationResult,
+  buildRequirementDocBlockPerFile,
 };

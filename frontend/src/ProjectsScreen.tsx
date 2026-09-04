@@ -5,6 +5,7 @@ import { projectsApi } from './api';
 import ProjectModal from './ProjectModal';
 import './ProjectsScreen.css';
 
+
 const STAGE_ORDER = STATUS_STAGE_ORDER;
 
 function formatDate(d: string | null) {
@@ -39,6 +40,7 @@ export default function ProjectsScreen({ onOpenDetail }: { onOpenDetail: (id: nu
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, keyword]);
+
 
   const PROGRESS_GROUP: ProjectStatus[] = ['qa_in_progress', 'test_done'];
   const DONE_GROUP: ProjectStatus[] = ['completed', 'on_hold'];

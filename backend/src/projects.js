@@ -46,7 +46,7 @@ router.get('/:id', async (req, res) => {
     const result = await pool.query(
       `SELECT
         p.id, p.name, p.description, p.status, p.manager,
-        p.start_date, p.end_date, p.created_at, p.updated_at,
+        p.start_date, p.end_date, p.created_at, p.updated_at, p.current_round,
         COALESCE(ROUND(100.0 * COUNT(tc.id) FILTER (WHERE tc.status = 'pass') / NULLIF(COUNT(tc.id), 0)), 0)::int AS progress
        FROM projects p
        LEFT JOIN test_cases tc ON tc.project_id = p.id
@@ -144,4 +144,23 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// PUT /api/projects/:id/advance-round - 다음 차수로 진행
+router.put('/:id/advance-round', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `UPDATE projects SET current_round = current_round + 1, updated_at = NOW()
+       WHERE id = $1 RETURNING *`,
+      [req.params.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: '프로젝트를 찾을 수 없습니다.' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: '차수 진행에 실패했습니다.' });
+  }
+});
+
 module.exports = router;
+

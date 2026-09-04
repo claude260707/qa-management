@@ -16,6 +16,7 @@ export interface Project {
   progress: number;
   created_at: string;
   updated_at: string;
+  current_round: number;
 }
 
 export interface ProjectInput {
@@ -166,6 +167,8 @@ export interface TestCase {
   created_at: string;
   updated_at: string;
   status_note: string | null;
+  source_category: string | null;
+  source_snippet: string | null;
 }
 
 export interface TestCaseInput {
@@ -181,6 +184,8 @@ export interface TestCaseInput {
   tester?: string;
   automation_script?: string;
   status_note?: string | null;
+  source_category?: string | null;
+  source_snippet?: string | null;
 }
 
 export interface TestCaseBulkItem {
@@ -191,6 +196,8 @@ export interface TestCaseBulkItem {
   expected_result?: string;
   priority?: TestCasePriority;
   tester?: string;
+  source_category?: string | null;
+  source_snippet?: string | null;
 }
 
 export const TC_STATUS_LABEL: Record<TestCaseStatus, string> = {
@@ -303,3 +310,22 @@ export const BUG_STATUS_LABEL: Record<BugStatus, string> = {
 
 // 선형 진행 순서 (재오픈은 분기 상태이므로 트래커 순서에서 제외)
 export const BUG_STAGE_ORDER: BugStatus[] = ['open', 'in_progress', 'fixed', 'closed'];
+
+
+
+export interface ExecutionSnapshotSummary {
+  total: number;
+  by_status: Record<string, number>;
+  by_executor: {
+    automated: Record<string, number>;
+    manual: Record<string, number>;
+  };
+}
+
+export interface DailyReportResponse {
+  round: number | null;
+  date?: string;
+  message?: string;
+  today?: ExecutionSnapshotSummary;
+  yesterday?: ExecutionSnapshotSummary;
+}
