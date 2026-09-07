@@ -4,6 +4,7 @@ import { STATUS_LABEL } from './types';
 import { projectsApi } from './api';
 import TestCasesScreen from './TestCasesScreen';
 import PlanAnalysisScreen from './PlanAnalysisScreen';
+import type { PlanAnalysisTab } from './PlanAnalysisScreen';
 import Breadcrumb from './Breadcrumb';
 import './ProjectDetailScreen.css';
 
@@ -19,8 +20,24 @@ function formatDate(d: string | null) {
   return d.slice(0, 10);
 }
 
-export default function ProjectDetailScreen({ projectId, onBack }: { projectId: number; onBack: () => void }) {
-  const [tab, setTab] = useState<DetailTab>('planAnalysis');
+interface ProjectDetailScreenProps {
+  projectId: number;
+  onBack: () => void;
+  // 사이드바 폴더 트리와 동기화하기 위해 상위(App)에서 내려주는 제어값들.
+  // 넘어오지 않으면 이 화면 내부 상태로만 동작 (하위 호환).
+  tab?: DetailTab;
+  onTabChange?: (tab: DetailTab) => void;
+  planStep?: PlanAnalysisTab;
+  onPlanStepChange?: (step: PlanAnalysisTab) => void;
+}
+
+export default function ProjectDetailScreen({ projectId, onBack, tab: controlledTab, onTabChange, planStep, onPlanStepChange }: ProjectDetailScreenProps) {
+  const [internalTab, setInternalTab] = useState<DetailTab>('planAnalysis');
+  const tab = controlledTab ?? internalTab;
+  function setTab(t: DetailTab) {
+    if (onTabChange) onTabChange(t);
+    else setInternalTab(t);
+  }
   const [project, setProject] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
   const [planStepLabel, setPlanStepLabel] = useState('');
@@ -28,7 +45,7 @@ export default function ProjectDetailScreen({ projectId, onBack }: { projectId: 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    setTab('planAnalysis');
+    if (!controlledTab) setInternalTab('planAnalysis');
     setPlanStepLabel('');
     projectsApi.get(projectId).then((p) => {
       if (cancelled) return;
@@ -36,6 +53,7 @@ export default function ProjectDetailScreen({ projectId, onBack }: { projectId: 
       setLoading(false);
     }).catch(() => setLoading(false));
     return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   async function handleAdvanceRound() {
@@ -104,7 +122,12 @@ export default function ProjectDetailScreen({ projectId, onBack }: { projectId: 
       </div>
 
       <div style={{ display: tab === 'planAnalysis' ? 'block' : 'none' }}>
-        <PlanAnalysisScreen embeddedProjectId={projectId} onStepChange={setPlanStepLabel} />
+        <PlanAnalysisScreen
+          embeddedProjectId={projectId}
+          onStepChange={setPlanStepLabel}
+          activeTab={planStep}
+          onActiveTabChange={onPlanStepChange}
+        />
       </div>
       {tab === 'testcases' && <TestCasesScreen embeddedProjectId={projectId} />}
     </div>

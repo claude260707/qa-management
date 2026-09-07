@@ -1,0 +1,509 @@
+From 59ca995699a428061275fc9d9a14114fc14e7e0a Mon Sep 17 00:00:00 2001
+From: Claude <claude@anthropic.com>
+Date: Mon, 7 Sep 2026 01:30:43 +0000
+Subject: [PATCH] =?UTF-8?q?feat:=20=EC=82=AC=EC=9D=B4=EB=93=9C=EB=B0=94?=
+ =?UTF-8?q?=EC=97=90=20=ED=94=84=EB=A1=9C=EC=A0=9D=ED=8A=B8=EB=B3=84=20?=
+ =?UTF-8?q?=EA=B8=B0=ED=9A=8D=20=EC=9E=90=EB=A3=8C=20=EB=B6=84=EC=84=9D(?=
+ =?UTF-8?q?=E2=91=A0~=E2=91=A4)/Test=20Case=20=ED=8F=B4=EB=8D=94=20?=
+ =?UTF-8?q?=ED=8A=B8=EB=A6=AC=20=EC=B6=94=EA=B0=80?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- Sidebar에서 프로젝트를 펼치면 '기획 자료 분석' 폴더와 그 하위 ①~⑤ 단계, 'Test Case'를
+  하위 항목으로 바로 클릭해서 이동할 수 있음
+- App.tsx에서 detailTab/planStep 상태를 끌어올려 Sidebar <-> ProjectDetailScreen <-> PlanAnalysisScreen
+  간 선택 상태를 양방향 동기화
+- PlanAnalysisScreen은 activeTab/onActiveTabChange가 제어형으로 넘어오면 그 값을 쓰고,
+  없으면 기존처럼 내부 상태로 동작 (하위 호환)
+- 본문 상단의 기존 탭(기획 자료 분석/Test Case, ①~⑤)은 그대로 유지 - 사이드바와 본문 양쪽에서
+  모두 이동 가능
+---
+ frontend/src/App.tsx                 |  34 +++++++-
+ frontend/src/PlanAnalysisScreen.tsx  |  21 ++++-
+ frontend/src/ProjectDetailScreen.tsx |  31 ++++++-
+ frontend/src/Sidebar.css             | 107 ++++++++++++++++++++++-
+ frontend/src/Sidebar.tsx             | 122 ++++++++++++++++++++++++---
+ 5 files changed, 293 insertions(+), 22 deletions(-)
+
+diff --git a/frontend/src/App.tsx b/frontend/src/App.tsx
+index be097dc..20ad6d8 100644
+--- a/frontend/src/App.tsx
++++ b/frontend/src/App.tsx
+@@ -2,14 +2,20 @@ import { useState } from 'react';
+ import Sidebar from './Sidebar';
+ import ProjectsScreen from './ProjectsScreen';
+ import ProjectDetailScreen from './ProjectDetailScreen';
++import type { PlanAnalysisTab } from './PlanAnalysisScreen';
+ import './App.layout.css';
+ 
+ export default function App() {
+   const [detailProjectId, setDetailProjectId] = useState<number | null>(null);
+   const [projectsVersion, setProjectsVersion] = useState(0);
++  // 사이드바 폴더 트리 <-> 본문 탭을 서로 동기화하기 위해 여기서 관리
++  const [detailTab, setDetailTab] = useState<'planAnalysis' | 'testcases'>('planAnalysis');
++  const [planStep, setPlanStep] = useState<PlanAnalysisTab>('type');
+ 
+   function handleSelectProject(id: number) {
+     setDetailProjectId(id);
++    setDetailTab('planAnalysis');
++    setPlanStep('type');
+   }
+ 
+   function handleOpenProjectList() {
+@@ -20,6 +26,19 @@ export default function App() {
+     setProjectsVersion((v) => v + 1);
+   }
+ 
++  // 사이드바 폴더 트리에서 "기획 자료 분석" 하위의 특정 단계(①~⑤)를 클릭했을 때
++  function handleSelectPlanStep(projectId: number, step: PlanAnalysisTab) {
++    setDetailProjectId(projectId);
++    setDetailTab('planAnalysis');
++    setPlanStep(step);
++  }
++
++  // 사이드바 폴더 트리에서 "Test Case"를 클릭했을 때
++  function handleSelectTestCaseTab(projectId: number) {
++    setDetailProjectId(projectId);
++    setDetailTab('testcases');
++  }
++
+   return (
+     <div className="app-shell">
+       <Sidebar
+@@ -28,10 +47,23 @@ export default function App() {
+         onSelectProject={handleSelectProject}
+         onOpenProjectList={handleOpenProjectList}
+         refreshSignal={projectsVersion}
++        activeDetailTab={detailTab}
++        activePlanStep={planStep}
++        onSelectPlanStep={handleSelectPlanStep}
++        onSelectTestCaseTab={handleSelectTestCaseTab}
+       />
+       <main className="app-main">
+         {detailProjectId !== null
+-          ? <ProjectDetailScreen projectId={detailProjectId} onBack={handleOpenProjectList} />
++          ? (
++            <ProjectDetailScreen
++              projectId={detailProjectId}
++              onBack={handleOpenProjectList}
++              tab={detailTab}
++              onTabChange={setDetailTab}
++              planStep={planStep}
++              onPlanStepChange={setPlanStep}
++            />
++          )
+           : <ProjectsScreen onOpenDetail={setDetailProjectId} onProjectsChanged={handleProjectsChanged} />}
+       </main>
+     </div>
+diff --git a/frontend/src/PlanAnalysisScreen.tsx b/frontend/src/PlanAnalysisScreen.tsx
+index 65e2606..15bc0aa 100644
+--- a/frontend/src/PlanAnalysisScreen.tsx
++++ b/frontend/src/PlanAnalysisScreen.tsx
+@@ -15,6 +15,10 @@ function mapPriorityToCode(korean: string): 'minor' | 'major' | 'critical' {
+ interface PlanAnalysisScreenProps {
+   embeddedProjectId: number;
+   onStepChange?: (label: string) => void;
++  // 사이드바 폴더 트리에서 특정 단계를 직접 클릭했을 때 이 화면의 탭을 그쪽으로 이동시키기 위한 제어용 props.
++  // 전달되지 않으면 기존처럼 이 컴포넌트 내부 상태로만 동작함 (하위 호환).
++  activeTab?: PlanAnalysisTab;
++  onActiveTabChange?: (tab: PlanAnalysisTab) => void;
+ }
+ 
+ interface RequirementFile {
+@@ -102,17 +106,19 @@ const CATEGORY_META: Record<ConsistencyIssue['category'], { icon: string; label:
+   },
+ };
+ 
+-type PlanAnalysisTab = 'type' | 'rules' | 'consistency' | 'exception' | 'basic';
++export type PlanAnalysisTab = 'type' | 'rules' | 'consistency' | 'exception' | 'basic';
+ 
+-const TAB_CONFIG: { key: PlanAnalysisTab; label: string }[] = [
++export const PLAN_ANALYSIS_TAB_CONFIG: { key: PlanAnalysisTab; label: string }[] = [
+   { key: 'type', label: '① 유형 인지' },
+   { key: 'rules', label: '② 정책·제한사항 분석' },
+   { key: 'consistency', label: '③ 정합성 검수' },
+   { key: 'exception', label: '④ 예외 케이스' },
+   { key: 'basic', label: '⑤ 기본 기능 TC' },
+ ];
++// 기존 내부 코드에서 쓰던 이름 그대로 유지 (별칭)
++const TAB_CONFIG = PLAN_ANALYSIS_TAB_CONFIG;
+ 
+-export default function PlanAnalysisScreen({ embeddedProjectId, onStepChange }: PlanAnalysisScreenProps) {
++export default function PlanAnalysisScreen({ embeddedProjectId, onStepChange, activeTab: controlledActiveTab, onActiveTabChange }: PlanAnalysisScreenProps) {
+   // --- 섹션 1: 요구사항 문서 (RFP/제안서/요구사항 정의서 등, 여러 개 업로드 가능) ---
+   const [requirementFiles, setRequirementFiles] = useState<RequirementFile[]>([]);
+   const [extractingRequirement, setExtractingRequirement] = useState(false);
+@@ -194,7 +200,14 @@ export default function PlanAnalysisScreen({ embeddedProjectId, onStepChange }:
+ 
+   const [error, setError] = useState('');
+   const [restoringState, setRestoringState] = useState(true);
+-  const [activeTab, setActiveTab] = useState<PlanAnalysisTab>('type');
++  const [internalActiveTab, setInternalActiveTab] = useState<PlanAnalysisTab>('type');
++  // 사이드바에서 제어하는 경우(controlledActiveTab이 넘어온 경우)엔 그 값을 쓰고,
++  // 아니면 이 화면 내부 탭 클릭으로만 관리되던 기존 방식 그대로 유지 (하위 호환)
++  const activeTab = controlledActiveTab ?? internalActiveTab;
++  function setActiveTab(tab: PlanAnalysisTab) {
++    if (onActiveTabChange) onActiveTabChange(tab);
++    else setInternalActiveTab(tab);
++  }
+ 
+   // 현재 단계(①~⑤)가 바뀔 때마다 상위(프로젝트 상세 화면)에 라벨을 알려 breadcrumb에 반영
+   useEffect(() => {
+diff --git a/frontend/src/ProjectDetailScreen.tsx b/frontend/src/ProjectDetailScreen.tsx
+index fee2ef4..0e9cfcb 100644
+--- a/frontend/src/ProjectDetailScreen.tsx
++++ b/frontend/src/ProjectDetailScreen.tsx
+@@ -4,6 +4,7 @@ import { STATUS_LABEL } from './types';
+ import { projectsApi } from './api';
+ import TestCasesScreen from './TestCasesScreen';
+ import PlanAnalysisScreen from './PlanAnalysisScreen';
++import type { PlanAnalysisTab } from './PlanAnalysisScreen';
+ import Breadcrumb from './Breadcrumb';
+ import './ProjectDetailScreen.css';
+ 
+@@ -19,8 +20,24 @@ function formatDate(d: string | null) {
+   return d.slice(0, 10);
+ }
+ 
+-export default function ProjectDetailScreen({ projectId, onBack }: { projectId: number; onBack: () => void }) {
+-  const [tab, setTab] = useState<DetailTab>('planAnalysis');
++interface ProjectDetailScreenProps {
++  projectId: number;
++  onBack: () => void;
++  // 사이드바 폴더 트리와 동기화하기 위해 상위(App)에서 내려주는 제어값들.
++  // 넘어오지 않으면 이 화면 내부 상태로만 동작 (하위 호환).
++  tab?: DetailTab;
++  onTabChange?: (tab: DetailTab) => void;
++  planStep?: PlanAnalysisTab;
++  onPlanStepChange?: (step: PlanAnalysisTab) => void;
++}
++
++export default function ProjectDetailScreen({ projectId, onBack, tab: controlledTab, onTabChange, planStep, onPlanStepChange }: ProjectDetailScreenProps) {
++  const [internalTab, setInternalTab] = useState<DetailTab>('planAnalysis');
++  const tab = controlledTab ?? internalTab;
++  function setTab(t: DetailTab) {
++    if (onTabChange) onTabChange(t);
++    else setInternalTab(t);
++  }
+   const [project, setProject] = useState<Project | null>(null);
+   const [loading, setLoading] = useState(true);
+   const [planStepLabel, setPlanStepLabel] = useState('');
+@@ -28,7 +45,7 @@ export default function ProjectDetailScreen({ projectId, onBack }: { projectId:
+   useEffect(() => {
+     let cancelled = false;
+     setLoading(true);
+-    setTab('planAnalysis');
++    if (!controlledTab) setInternalTab('planAnalysis');
+     setPlanStepLabel('');
+     projectsApi.get(projectId).then((p) => {
+       if (cancelled) return;
+@@ -36,6 +53,7 @@ export default function ProjectDetailScreen({ projectId, onBack }: { projectId:
+       setLoading(false);
+     }).catch(() => setLoading(false));
+     return () => { cancelled = true; };
++    // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [projectId]);
+ 
+   async function handleAdvanceRound() {
+@@ -104,7 +122,12 @@ export default function ProjectDetailScreen({ projectId, onBack }: { projectId:
+       </div>
+ 
+       <div style={{ display: tab === 'planAnalysis' ? 'block' : 'none' }}>
+-        <PlanAnalysisScreen embeddedProjectId={projectId} onStepChange={setPlanStepLabel} />
++        <PlanAnalysisScreen
++          embeddedProjectId={projectId}
++          onStepChange={setPlanStepLabel}
++          activeTab={planStep}
++          onActiveTabChange={onPlanStepChange}
++        />
+       </div>
+       {tab === 'testcases' && <TestCasesScreen embeddedProjectId={projectId} />}
+     </div>
+diff --git a/frontend/src/Sidebar.css b/frontend/src/Sidebar.css
+index 5453477..150057a 100644
+--- a/frontend/src/Sidebar.css
++++ b/frontend/src/Sidebar.css
+@@ -163,7 +163,8 @@
+   align-items: center;
+   justify-content: space-between;
+   gap: 8px;
+-  width: 100%;
++  flex: 1;
++  min-width: 0;
+   padding: 7px 10px;
+   background: transparent;
+   border: none;
+@@ -175,6 +176,110 @@
+   transition: background 0.15s ease, color 0.15s ease;
+ }
+ 
++.sidebar-project-row {
++  display: flex;
++  align-items: center;
++  gap: 2px;
++}
++
++.sidebar-project-chevron {
++  width: 18px;
++  height: 18px;
++  flex-shrink: 0;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  background: transparent;
++  border: none;
++  border-radius: 5px;
++  color: rgba(255,255,255,0.4);
++  font-size: 10px;
++  cursor: pointer;
++}
++
++.sidebar-project-chevron:hover {
++  background: rgba(255,255,255,0.06);
++  color: #fff;
++}
++
++.sidebar-project-group {
++  display: flex;
++  flex-direction: column;
++}
++
++.sidebar-project-children {
++  margin: 2px 0 6px 20px;
++  padding-left: 8px;
++  border-left: 1px solid rgba(255,255,255,0.06);
++  display: flex;
++  flex-direction: column;
++  gap: 1px;
++}
++
++.sidebar-subfolder-row {
++  display: flex;
++  align-items: center;
++  gap: 2px;
++}
++
++.sidebar-child-item {
++  display: flex;
++  align-items: center;
++  gap: 6px;
++  width: 100%;
++  padding: 6px 8px;
++  background: transparent;
++  border: none;
++  border-radius: 5px;
++  color: rgba(255,255,255,0.55);
++  font-size: 12px;
++  text-align: left;
++  cursor: pointer;
++}
++
++.sidebar-child-item:hover {
++  background: rgba(255,255,255,0.06);
++  color: #fff;
++}
++
++.sidebar-child-item.is-active {
++  background: var(--bg-sidebar-active);
++  color: #fff;
++  font-weight: 500;
++}
++
++.sidebar-step-list {
++  margin: 1px 0 1px 18px;
++  padding-left: 8px;
++  border-left: 1px solid rgba(255,255,255,0.06);
++  display: flex;
++  flex-direction: column;
++  gap: 1px;
++}
++
++.sidebar-step-item {
++  width: 100%;
++  padding: 5px 8px;
++  background: transparent;
++  border: none;
++  border-radius: 5px;
++  color: rgba(255,255,255,0.48);
++  font-size: 11.5px;
++  text-align: left;
++  cursor: pointer;
++}
++
++.sidebar-step-item:hover {
++  background: rgba(255,255,255,0.06);
++  color: #fff;
++}
++
++.sidebar-step-item.is-active {
++  background: var(--bg-sidebar-active);
++  color: #fff;
++  font-weight: 500;
++}
++
+ .sidebar-project-item:hover {
+   background: rgba(255,255,255,0.06);
+   color: #fff;
+diff --git a/frontend/src/Sidebar.tsx b/frontend/src/Sidebar.tsx
+index e0856f2..4327511 100644
+--- a/frontend/src/Sidebar.tsx
++++ b/frontend/src/Sidebar.tsx
+@@ -1,6 +1,8 @@
+ import { useEffect, useState } from 'react';
+ import type { Project } from './types';
+ import { projectsApi } from './api';
++import { PLAN_ANALYSIS_TAB_CONFIG } from './PlanAnalysisScreen';
++import type { PlanAnalysisTab } from './PlanAnalysisScreen';
+ import './Sidebar.css';
+ 
+ interface SidebarProps {
+@@ -9,12 +11,24 @@ interface SidebarProps {
+   onSelectProject: (id: number) => void;
+   onOpenProjectList: () => void;
+   refreshSignal: number;
++  // 프로젝트 하위 폴더(기획 자료 분석 > ①~⑤ / Test Case) 트리 동기화용
++  activeDetailTab?: 'planAnalysis' | 'testcases';
++  activePlanStep?: PlanAnalysisTab;
++  onSelectPlanStep?: (projectId: number, step: PlanAnalysisTab) => void;
++  onSelectTestCaseTab?: (projectId: number) => void;
+ }
+ 
+-export default function Sidebar({ activeProjectId, isListActive, onSelectProject, onOpenProjectList, refreshSignal }: SidebarProps) {
++export default function Sidebar({
++  activeProjectId, isListActive, onSelectProject, onOpenProjectList, refreshSignal,
++  activeDetailTab, activePlanStep, onSelectPlanStep, onSelectTestCaseTab,
++}: SidebarProps) {
+   const [expanded, setExpanded] = useState(true);
+   const [projects, setProjects] = useState<Project[]>([]);
+   const [loading, setLoading] = useState(false);
++  // 어떤 프로젝트의 하위 폴더(기획 자료 분석/Test Case)가 펼쳐져 있는지
++  const [expandedProjectIds, setExpandedProjectIds] = useState<Set<number>>(new Set());
++  // "기획 자료 분석" 폴더 자체를 펼쳐서 ①~⑤ 단계까지 보여줄지 (프로젝트별로 관리)
++  const [expandedPlanFolders, setExpandedPlanFolders] = useState<Set<number>>(new Set());
+ 
+   // 프로젝트가 생성/수정/삭제될 때마다(refreshSignal 증가) 사이드바 목록도 최신화
+   useEffect(() => {
+@@ -30,6 +44,33 @@ export default function Sidebar({ activeProjectId, isListActive, onSelectProject
+     return () => { cancelled = true; };
+   }, [refreshSignal]);
+ 
++  // 현재 열려있는 프로젝트는 자동으로 하위 폴더까지 펼쳐서 보여줌 (어디 있는지 바로 보이게)
++  useEffect(() => {
++    if (activeProjectId == null) return;
++    setExpandedProjectIds((prev) => new Set(prev).add(activeProjectId));
++    if (activeDetailTab === 'planAnalysis') {
++      setExpandedPlanFolders((prev) => new Set(prev).add(activeProjectId));
++    }
++  }, [activeProjectId, activeDetailTab]);
++
++  function toggleProjectFolder(id: number) {
++    setExpandedProjectIds((prev) => {
++      const next = new Set(prev);
++      if (next.has(id)) next.delete(id);
++      else next.add(id);
++      return next;
++    });
++  }
++
++  function togglePlanFolder(id: number) {
++    setExpandedPlanFolders((prev) => {
++      const next = new Set(prev);
++      if (next.has(id)) next.delete(id);
++      else next.add(id);
++      return next;
++    });
++  }
++
+   return (
+     <aside className="sidebar">
+       <div className="sidebar-brand">
+@@ -65,17 +106,74 @@ export default function Sidebar({ activeProjectId, isListActive, onSelectProject
+             {!loading && projects.length === 0 && (
+               <div className="sidebar-project-empty">등록된 프로젝트가 없습니다</div>
+             )}
+-            {!loading && projects.map((p) => (
+-              <button
+-                key={p.id}
+-                className={`sidebar-project-item ${activeProjectId === p.id ? 'is-active' : ''}`}
+-                onClick={() => onSelectProject(p.id)}
+-                title={p.name}
+-              >
+-                <span className="sidebar-project-name">{p.name}</span>
+-                <span className="sidebar-project-progress">{p.progress}%</span>
+-              </button>
+-            ))}
++            {!loading && projects.map((p) => {
++              const isProjectOpen = expandedProjectIds.has(p.id);
++              const isPlanFolderOpen = expandedPlanFolders.has(p.id);
++              const isThisProjectActive = activeProjectId === p.id;
++              return (
++                <div key={p.id} className="sidebar-project-group">
++                  <div className="sidebar-project-row">
++                    <button
++                      className="sidebar-project-chevron"
++                      onClick={() => toggleProjectFolder(p.id)}
++                      aria-label={isProjectOpen ? '폴더 접기' : '폴더 펼치기'}
++                    >
++                      {isProjectOpen ? '▾' : '▸'}
++                    </button>
++                    <button
++                      className={`sidebar-project-item ${isThisProjectActive ? 'is-active' : ''}`}
++                      onClick={() => onSelectProject(p.id)}
++                      title={p.name}
++                    >
++                      <span className="sidebar-project-name">{p.name}</span>
++                      <span className="sidebar-project-progress">{p.progress}%</span>
++                    </button>
++                  </div>
++
++                  {isProjectOpen && (
++                    <div className="sidebar-project-children">
++                      {/* 기획 자료 분석 폴더 - 펼치면 ①~⑤ 단계가 하위 항목으로 나옴 */}
++                      <div className="sidebar-subfolder-row">
++                        <button
++                          className="sidebar-project-chevron"
++                          onClick={() => togglePlanFolder(p.id)}
++                          aria-label={isPlanFolderOpen ? '기획 자료 분석 접기' : '기획 자료 분석 펼치기'}
++                        >
++                          {isPlanFolderOpen ? '▾' : '▸'}
++                        </button>
++                        <button
++                          className={`sidebar-child-item ${isThisProjectActive && activeDetailTab === 'planAnalysis' && !activePlanStep ? 'is-active' : ''}`}
++                          onClick={() => onSelectPlanStep?.(p.id, activePlanStep ?? 'type')}
++                        >
++                          📁 기획 자료 분석
++                        </button>
++                      </div>
++
++                      {isPlanFolderOpen && (
++                        <div className="sidebar-step-list">
++                          {PLAN_ANALYSIS_TAB_CONFIG.map((step) => (
++                            <button
++                              key={step.key}
++                              className={`sidebar-step-item ${isThisProjectActive && activeDetailTab === 'planAnalysis' && activePlanStep === step.key ? 'is-active' : ''}`}
++                              onClick={() => onSelectPlanStep?.(p.id, step.key)}
++                            >
++                              {step.label}
++                            </button>
++                          ))}
++                        </div>
++                      )}
++
++                      <button
++                        className={`sidebar-child-item ${isThisProjectActive && activeDetailTab === 'testcases' ? 'is-active' : ''}`}
++                        onClick={() => onSelectTestCaseTab?.(p.id)}
++                      >
++                        📄 Test Case
++                      </button>
++                    </div>
++                  )}
++                </div>
++              );
++            })}
+           </div>
+         )}
+       </nav>
+-- 
+2.43.0
+

@@ -15,6 +15,10 @@ function mapPriorityToCode(korean: string): 'minor' | 'major' | 'critical' {
 interface PlanAnalysisScreenProps {
   embeddedProjectId: number;
   onStepChange?: (label: string) => void;
+  // 사이드바 폴더 트리에서 특정 단계를 직접 클릭했을 때 이 화면의 탭을 그쪽으로 이동시키기 위한 제어용 props.
+  // 전달되지 않으면 기존처럼 이 컴포넌트 내부 상태로만 동작함 (하위 호환).
+  activeTab?: PlanAnalysisTab;
+  onActiveTabChange?: (tab: PlanAnalysisTab) => void;
 }
 
 interface RequirementFile {
@@ -102,17 +106,19 @@ const CATEGORY_META: Record<ConsistencyIssue['category'], { icon: string; label:
   },
 };
 
-type PlanAnalysisTab = 'type' | 'rules' | 'consistency' | 'exception' | 'basic';
+export type PlanAnalysisTab = 'type' | 'rules' | 'consistency' | 'exception' | 'basic';
 
-const TAB_CONFIG: { key: PlanAnalysisTab; label: string }[] = [
+export const PLAN_ANALYSIS_TAB_CONFIG: { key: PlanAnalysisTab; label: string }[] = [
   { key: 'type', label: '① 유형 인지' },
   { key: 'rules', label: '② 정책·제한사항 분석' },
   { key: 'consistency', label: '③ 정합성 검수' },
   { key: 'exception', label: '④ 예외 케이스' },
   { key: 'basic', label: '⑤ 기본 기능 TC' },
 ];
+// 기존 내부 코드에서 쓰던 이름 그대로 유지 (별칭)
+const TAB_CONFIG = PLAN_ANALYSIS_TAB_CONFIG;
 
-export default function PlanAnalysisScreen({ embeddedProjectId, onStepChange }: PlanAnalysisScreenProps) {
+export default function PlanAnalysisScreen({ embeddedProjectId, onStepChange, activeTab: controlledActiveTab, onActiveTabChange }: PlanAnalysisScreenProps) {
   // --- 섹션 1: 요구사항 문서 (RFP/제안서/요구사항 정의서 등, 여러 개 업로드 가능) ---
   const [requirementFiles, setRequirementFiles] = useState<RequirementFile[]>([]);
   const [extractingRequirement, setExtractingRequirement] = useState(false);
@@ -194,7 +200,14 @@ export default function PlanAnalysisScreen({ embeddedProjectId, onStepChange }: 
 
   const [error, setError] = useState('');
   const [restoringState, setRestoringState] = useState(true);
-  const [activeTab, setActiveTab] = useState<PlanAnalysisTab>('type');
+  const [internalActiveTab, setInternalActiveTab] = useState<PlanAnalysisTab>('type');
+  // 사이드바에서 제어하는 경우(controlledActiveTab이 넘어온 경우)엔 그 값을 쓰고,
+  // 아니면 이 화면 내부 탭 클릭으로만 관리되던 기존 방식 그대로 유지 (하위 호환)
+  const activeTab = controlledActiveTab ?? internalActiveTab;
+  function setActiveTab(tab: PlanAnalysisTab) {
+    if (onActiveTabChange) onActiveTabChange(tab);
+    else setInternalActiveTab(tab);
+  }
 
   // 현재 단계(①~⑤)가 바뀔 때마다 상위(프로젝트 상세 화면)에 라벨을 알려 breadcrumb에 반영
   useEffect(() => {
