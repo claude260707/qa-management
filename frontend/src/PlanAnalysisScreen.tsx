@@ -165,6 +165,7 @@ export default function PlanAnalysisScreen({ embeddedProjectId, onStepChange, ac
   // --- 기본 기능(정상 케이스) TC 생성 - 화면설계서 기준, 독립 실행 ---
   const [extractingFeatures, setExtractingFeatures] = useState(false);
   const [features, setFeatures] = useState<{ name: string; desc: string; evidence?: string }[]>([]);
+  const [droppedFeatures, setDroppedFeatures] = useState<{ name: string; evidence: string }[]>([]);
   const [selectedFeatureIdx, setSelectedFeatureIdx] = useState<Set<number>>(new Set());
   const [generatingBasicTc, setGeneratingBasicTc] = useState(false);
   const [generateBasicProgress, setGenerateBasicProgress] = useState('');
@@ -588,6 +589,7 @@ function handleExportIssuesExcel() {
       const result = await planAnalysisApi.extractFeatures(designText);
       setFeatures(result.features);
       setSelectedFeatureIdx(new Set(result.features.map((_, idx) => idx)));
+      setDroppedFeatures(result.droppedFeatures || []);
       persistState({ features: result.features, draftBasicTestCases: [], savedBasicTcIdx: [] });
       if (result.droppedCount && result.droppedCount > 0) {
         setError(`${result.droppedCount}개 기능은 근거 문구를 원본 문서에서 찾을 수 없어 자동으로 제외했습니다.`);
@@ -1650,6 +1652,20 @@ function handleExportIssuesExcel() {
             <button onClick={handleExtractFeatures} disabled={extractingFeatures || !designText.trim()}>
               {extractingFeatures ? '추출 중...' : features.length > 0 ? '기능 목록 다시 추출' : 'TC 생성 목록 확인'}
             </button>
+
+            {droppedFeatures.length > 0 && (
+              <details style={{ marginTop: 10, fontSize: 12 }}>
+                <summary style={{ cursor: 'pointer', color: '#888' }}>제외된 기능 {droppedFeatures.length}개 보기 (디버그용)</summary>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                  {droppedFeatures.map((f, i) => (
+                    <div key={i} style={{ border: '1px solid #eee', borderRadius: 4, padding: '6px 10px', background: '#fafafa' }}>
+                      <p style={{ margin: 0, fontWeight: 500 }}>{f.name}</p>
+                      <p style={{ margin: '4px 0 0', color: '#a33' }}>근거: {f.evidence}</p>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
 
             {features.length > 0 && (
               <>

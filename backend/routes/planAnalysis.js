@@ -116,9 +116,12 @@ router.post('/extract-features', async (req, res) => {
 
     const normalizedPlanText = normalizeForMatch(planText);
     const features = parsed.filter((f) => isEvidenceGrounded(f.evidence, normalizedPlanText));
-    const droppedCount = parsed.length - features.length;
+    const droppedFeatures = parsed
+      .filter((f) => !isEvidenceGrounded(f.evidence, normalizedPlanText))
+      .slice(0, 50)
+      .map((f) => ({ name: f.name, evidence: f.evidence || '(빈 값)' }));
 
-    res.json({ features, droppedCount });
+    res.json({ features, droppedCount: droppedFeatures.length, droppedFeatures });
   } catch (err) {
     console.error('extract-features error:', err);
     res.status(500).json({ error: err.isTruncated ? err.message : '기능 목록 추출 중 오류가 발생했습니다.' });

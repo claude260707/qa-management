@@ -268,7 +268,7 @@ export const planAnalysisApi = {
 
   extractFeatures: (
     planText: string
-  ): Promise<{ features: { name: string; desc: string; evidence?: string }[]; droppedCount?: number }> =>
+  ): Promise<{ features: { name: string; desc: string; evidence?: string }[]; droppedCount?: number; droppedFeatures?: { name: string; evidence: string }[] }> =>
     fetch(`${BASE_URL}/plan/extract-features`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
