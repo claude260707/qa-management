@@ -323,33 +323,42 @@ ${gapList}
 }
 
 function parseTcGenerationResult(text) {
-  const blocks = [...text.matchAll(/\[TC_START\]([\s\S]*?)\[TC_END\]/g)];
-  return blocks.map((b) => {
-    const block = b[1];
+  // [TC_END]가 있으면 페어로, 없으면(AI가 종료 태그를 빼먹거나 응답이 중간에 잘린 경우)
+  // [TC_START] 기준으로만 블록을 나눈다 - 완성된 앞부분 TC들까지 통째로 버려지는 것을 방지.
+  const rawBlocks = text.split('[TC_START]').slice(1);
+  const results = [];
+  for (let block of rawBlocks) {
+    const endIdx = block.indexOf('[TC_END]');
+    if (endIdx !== -1) block = block.slice(0, endIdx);
+
     const title = block.match(/\[TITLE\]:\s*(.+)/);
     const priority = block.match(/\[PRIORITY\]:\s*(.+)/);
     const precondition = block.match(/\[PRECONDITION\]:\s*(.+)/);
     const expected = block.match(/\[EXPECTED\]:\s*(.+)/);
     const basedOnRule = block.match(/\[BASED_ON_RULE\]:\s*(.*)/);
     const stepsMatch = block.match(/\[STEPS\]:\s*([\s\S]*?)(?=\[EXPECTED\]:)/);
-    const steps = stepsMatch
-      ? stepsMatch[1]
-        .split('\n')
-        .map((s) => s.replace(/^-\s*/, '').trim())
-        .filter(Boolean)
-        .map((s, i) => `${i + 1}. ${s}`)
-        .join('\n')
-      : '';
 
-    return {
-      title: title ? title[1].trim() : '(제목 없음)',
+    // 필수 필드(제목/사전조건/절차/기대결과)가 하나라도 안 잡히면 - 응답이 그 블록 중간에
+    // 잘렸거나 형식이 어긋난 것이므로, 어설픈 TC로 만들지 말고 통째로 건너뛴다.
+    if (!title || !precondition || !expected || !stepsMatch) continue;
+
+    const steps = stepsMatch[1]
+      .split('\n')
+      .map((s) => s.replace(/^-\s*/, '').trim())
+      .filter(Boolean)
+      .map((s, i) => `${i + 1}. ${s}`)
+      .join('\n');
+
+    results.push({
+      title: title[1].trim(),
       priority: priority ? priority[1].trim() : '중간',
-      precondition: precondition ? precondition[1].trim() : '',
+      precondition: precondition[1].trim(),
       steps,
-      expected_result: expected ? expected[1].trim() : '',
+      expected_result: expected[1].trim(),
       based_on_rule: basedOnRule ? basedOnRule[1].trim() : '',
-    };
-  });
+    });
+  }
+  return results;
 }
 
 /**
