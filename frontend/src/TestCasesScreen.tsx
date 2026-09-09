@@ -41,48 +41,6 @@ function parseBatchResult(text: string): Record<string, string> {
   return result;
 }
 
-function parseBulkTcText(text: string, requirementId: number | null): TestCaseBulkItem[] {
-  const blocks = [...text.matchAll(/\[TC\]([\s\S]*?)\[\/TC\]/g)].map((m) => m[1]);
-  const labelRegex = /^(제목|사전조건|절차|기대결과|우선순위)\s*:\s*(.*)$/;
-  const priorityMap: Record<string, TestCasePriority> = {
-	'높음': 'critical', '보통': 'major', '낮음': 'minor',
-	high: 'critical', medium: 'major', low: 'minor',
-	critical: 'critical', major: 'major', minor: 'minor',
-};
-
-  return blocks.map((block) => {
-    const fields: Record<string, string> = {};
-    let current = '';
-    let buffer: string[] = [];
-    const flush = () => {
-      if (current) fields[current] = buffer.join('\n').trim();
-      buffer = [];
-    };
-    for (const line of block.split('\n')) {
-      const m = line.match(labelRegex);
-      if (m) {
-        flush();
-        current = m[1];
-        buffer.push(m[2]);
-      } else {
-        buffer.push(line);
-      }
-    }
-    flush();
-
-    return {
-      requirement_id: requirementId,
-      title: fields['제목']?.trim() || '(제목 없음)',
-      precondition: fields['사전조건']?.trim() || '',
-      steps: fields['절차']?.trim() || '',
-      expected_result: fields['기대결과']?.trim() || '',
-      priority: priorityMap[fields['우선순위']?.trim()] ?? 'major',
-    };
-  });
-}
-
-
-
 function formatDate(d: string) {
   return d.slice(0, 10);
 }
@@ -108,12 +66,7 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
   const [batchPasteOpen, setBatchPasteOpen] = useState(false);
   const [batchPasteText, setBatchPasteText] = useState('');
   const [batchApplyMsg, setBatchApplyMsg] = useState<string | null>(null);
-  const [bulkTcPasteOpen, setBulkTcPasteOpen] = useState(false);
-  const [bulkTcPasteText, setBulkTcPasteText] = useState('');
-  const [bulkTcRequirementId, setBulkTcRequirementId] = useState<number | ''>('');
-  const [bulkTcParsed, setBulkTcParsed] = useState<TestCaseBulkItem[]>([]);
-  const [bulkTcChecked, setBulkTcChecked] = useState<Set<number>>(new Set());
-  const [bulkTcMsg, setBulkTcMsg] = useState<string | null>(null);
+
   const [dailyReportOpen, setDailyReportOpen] = useState(false);
   
 
@@ -170,41 +123,6 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
 }
   
  
- function handleParseBulkTc() {
-    const reqId = bulkTcRequirementId === '' ? null : bulkTcRequirementId;
-    const parsed = parseBulkTcText(bulkTcPasteText, reqId);
-    setBulkTcParsed(parsed);
-    setBulkTcChecked(new Set(parsed.map((_, i) => i)));
-    setBulkTcMsg(parsed.length === 0 ? '⚠ [TC]...[/TC] 형식을 찾지 못했습니다.' : null);
-  }
-
-  function toggleBulkTcChecked(idx: number) {
-    setBulkTcChecked((prev) => {
-      const next = new Set(prev);
-      if (next.has(idx)) {
-        next.delete(idx);
-      } else {
-        next.add(idx);
-      }
-      return next;
-    });
-  }
-
-  async function handleRegisterBulkTc() {
-    if (!projectId) return;
-    const items = bulkTcParsed.filter((_, i) => bulkTcChecked.has(i));
-    if (items.length === 0) return;
-    await testCasesApi.bulkCreate(projectId, items);
-    setBulkTcMsg(`${items.length}건 등록 완료`);
-    setBulkTcPasteText('');
-    setBulkTcParsed([]);
-    setBulkTcChecked(new Set());
-    setBulkTcPasteOpen(false);
-    await load();
-  } 
-  
-  
-  
 
   useEffect(() => {
     projectsApi.list().then(setProjects).catch(() => {});
@@ -354,7 +272,7 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
         )}
         <div className="tc-header-actions">
 			<button className="btn-ghost" onClick={() => setBulkUploadOpen(true)}>📤 엑셀 업로드</button>
-			<button className="btn-ghost" onClick={() => setBulkTcPasteOpen(true)}>🤖 AI 초안 붙여넣어 일괄 등록</button>
+
 			{selectedIds.size > 0 && (
 			<>
 				<button className="btn-ghost" onClick={handleCopyBatchPrompt}>🤖 선택 {selectedIds.size}건 AI 프롬프트 복사</button>
@@ -659,62 +577,6 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
             <div className="modal-footer">
               <button type="button" className="btn-ghost" onClick={() => setBatchPasteOpen(false)}>취소</button>
               <button type="button" className="btn-primary" onClick={handleApplyBatchResult}>제목 기준 자동 매칭 적용</button>
-            </div>
-          </div>
-        </div>
-      )}
-	  {bulkTcPasteOpen && (
-        <div className="modal-backdrop">
-          <div className="modal-panel" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640 }}>
-            <div className="modal-header">
-              <h2>AI 초안 붙여넣어 TC 일괄 등록</h2>
-              <button type="button" className="modal-close" onClick={() => { setBulkTcPasteOpen(false); setBulkTcParsed([]); setBulkTcChecked(new Set()); }}>✕</button>
-            </div>
-            <div className="modal-body">
-              <label className="field">
-                <span>연결할 요구사항 (선택)</span>
-                <select value={bulkTcRequirementId} onChange={(e) => setBulkTcRequirementId(e.target.value === '' ? '' : Number(e.target.value))}>
-                  <option value="">선택 안 함</option>
-                  {requirements.map((r) => (
-                    <option key={r.id} value={r.id}>{r.title}</option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="field">
-                <span>Claude 응답을 [TC]...[/TC] 형식으로 붙여넣으세요</span>
-                <textarea
-                  value={bulkTcPasteText}
-                  onChange={(e) => setBulkTcPasteText(e.target.value)}
-                  rows={10}
-                  style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}
-                  placeholder={'[TC]\n제목: ...\n사전조건: ...\n절차: ...\n기대결과: ...\n[/TC]'}
-                />
-              </label>
-
-              <button type="button" className="btn-ghost-sm" onClick={handleParseBulkTc}>파싱하기</button>
-
-              {bulkTcMsg && <div className="inline-upload-hint">{bulkTcMsg}</div>}
-
-              {bulkTcParsed.length > 0 && (
-                <div className="tc-list" style={{ marginTop: 12 }}>
-                  {bulkTcParsed.map((item, idx) => (
-                    <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '8px 0', borderTop: idx > 0 ? '1px solid var(--border)' : 'none' }}>
-                      <input type="checkbox" checked={bulkTcChecked.has(idx)} onChange={() => toggleBulkTcChecked(idx)} />
-                      <div>
-                        <strong>{item.title}</strong>
-                        <div style={{ fontSize: 12, color: 'var(--text-sub)' }}>{item.steps?.slice(0, 60)}...</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="modal-footer">
-              <button type="button" className="btn-ghost" onClick={() => setBulkTcPasteOpen(false)}>취소</button>
-              <button type="button" className="btn-primary" disabled={bulkTcChecked.size === 0} onClick={handleRegisterBulkTc}>
-                선택한 {bulkTcChecked.size}건 등록
-              </button>
             </div>
           </div>
         </div>
