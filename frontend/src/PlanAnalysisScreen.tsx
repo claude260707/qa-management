@@ -192,12 +192,6 @@ export default function PlanAnalysisScreen({ embeddedProjectId, onStepChange, ac
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
 
-  // --- TC 생성 (정책·제한사항 분석 탭: 선택한 규칙만) ---
-  const [generatingRuleTc, setGeneratingRuleTc] = useState(false);
-  const [generateRuleProgress, setGenerateRuleProgress] = useState('');
-  const [savingRuleTc, setSavingRuleTc] = useState(false);
-  const [saveRuleTcMessage, setSaveRuleTcMessage] = useState('');
-
   const [error, setError] = useState('');
   const [restoringState, setRestoringState] = useState(true);
   const [internalActiveTab, setInternalActiveTab] = useState<PlanAnalysisTab>('type');
@@ -829,59 +823,6 @@ function handleExportIssuesExcel() {
     }
   }
 
-  // 정책·제한사항 분석 탭 전용 - 선택한 규칙만으로 검증 TC 생성 (다른 탭 결과는 건드리지 않고 이어붙임)
-  async function handleGenerateRuleTc() {
-    const rulesToSend = rules.filter((_, idx) => selectedRuleIdx.has(idx));
-    if (rulesToSend.length === 0) {
-      setError('TC를 생성할 규칙을 하나 이상 선택해주세요.');
-      return;
-    }
-    if (!designText.trim()) {
-      setError('화면설계서 내용이 없습니다. TC는 화면설계서를 기준으로 생성됩니다.');
-      return;
-    }
-    setError('');
-    setGeneratingRuleTc(true);
-    try {
-      const ruleItems = rulesToSend.map((r) => ({ label: r.summary, note: r.verify || r.risk }));
-      const BATCH_SIZE = 5;
-      const ruleBatches: { label: string; note: string }[][] = [];
-      for (let i = 0; i < ruleItems.length; i += BATCH_SIZE) {
-        ruleBatches.push(ruleItems.slice(i, i + BATCH_SIZE));
-      }
-
-      let newResults: GeneratedTc[] = [];
-      const warnings: string[] = [];
-      for (let i = 0; i < ruleBatches.length; i++) {
-        setGenerateRuleProgress(`TC 생성 중... (${i + 1}/${ruleBatches.length}배치)`);
-        const result = await planAnalysisApi.generateSatisfiedTc(designText, ruleBatches[i]);
-        if (result.testCases.length === 0 && result.warning) warnings.push(result.warning);
-        newResults = newResults.concat(
-          attributeSource(result.testCases, ruleBatches[i], 1, 'policy_rule', (item) => `${item.label}${item.note ? ` (근거: ${item.note})` : ''}`)
-        );
-      }
-      if (warnings.length > 0) {
-        setError(`AI가 일부 규칙의 TC를 만들지 못했습니다: ${warnings[0]}`);
-      }
-
-      const startIdx = testCases.length;
-      const updated = [...testCases, ...newResults];
-      setTestCases(updated);
-      setSelectedTcIdx((prev) => {
-        const next = new Set(prev);
-        for (let i = startIdx; i < updated.length; i++) next.add(i);
-        return next;
-      });
-      setSaveRuleTcMessage('');
-      persistState({ draftTestCases: updated });
-    } catch (err: any) {
-      setError(err.message || 'TC 생성 중 오류가 발생했습니다.');
-    } finally {
-      setGeneratingRuleTc(false);
-      setGenerateRuleProgress('');
-    }
-  }
-
   function toggleTc(idx: number) {
     setSelectedTcIdx((prev) => {
       const next = new Set(prev);
@@ -899,13 +840,9 @@ function handleExportIssuesExcel() {
     );
     if (idxToSave.length === 0) return;
 
-    const isRuleOnly = categories?.length === 1 && categories[0] === 'policy_rule';
-    const setSavingFlag = isRuleOnly ? setSavingRuleTc : setSaving;
-    const setMsg = isRuleOnly ? setSaveRuleTcMessage : setSaveMessage;
-
     setError('');
-    setMsg('');
-    setSavingFlag(true);
+    setSaveMessage('');
+    setSaving(true);
     try {
       const itemsToSave = idxToSave.map((idx) => {
         const tc = testCases[idx];
@@ -922,14 +859,14 @@ function handleExportIssuesExcel() {
       });
 
       const result = await testCasesApi.bulkCreate(embeddedProjectId, itemsToSave);
-      setMsg(`${result.created_count}개 TC가 Test Case 목록에 저장되었습니다.`);
+      setSaveMessage(`${result.created_count}개 TC가 Test Case 목록에 저장되었습니다.`);
       const updatedSavedTcIdx = new Set([...savedTcIdx, ...idxToSave]);
       setSavedTcIdx(updatedSavedTcIdx);
       persistState({ savedTcIdx: Array.from(updatedSavedTcIdx) });
     } catch (err: any) {
       setError(err.message || 'TC 저장 중 오류가 발생했습니다.');
     } finally {
-      setSavingFlag(false);
+      setSaving(false);
     }
   }
 
@@ -1165,7 +1102,7 @@ function handleExportIssuesExcel() {
               {extractingRules ? '분석 중...' : '요구사항 정책·제한사항 분석'}
             </button>
             <p style={{ fontSize: 12, color: '#888', margin: '6px 0 0' }}>
-              요구사항 문서에만 있는 구체적인 조건·숫자·예외 규정을 찾아냅니다. "👍 맞음"으로 확인한 항목이 화면설계서가 이 규정대로 동작하는지 검증하는 TC로 만들어집니다.
+              요구사항 문서에만 있는 구체적인 조건·숫자·예외 규정을 찾아냅니다. "👍 맞음"으로 확인한 항목은 ④ 예외 케이스 탭에서 TC를 생성할 때 이 프로젝트만의 규칙으로 자동 반영됩니다.
             </p>
             {rules.length > 0 && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '10px 0 8px' }}>
@@ -1246,67 +1183,9 @@ function handleExportIssuesExcel() {
             )}
 
             {rules.length > 0 && (
-              <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px dashed #ddd' }}>
-                <button onClick={handleGenerateRuleTc} disabled={generatingRuleTc || selectedRuleIdx.size === 0}>
-                  {generatingRuleTc ? (generateRuleProgress || 'TC 생성 중...') : `선택한 ${selectedRuleIdx.size}개 규칙으로 TC 생성`}
-                </button>
-                {error && (
-                  <div style={{ background: '#fdecea', color: '#a33', padding: '8px 12px', borderRadius: 6, marginTop: 10, fontSize: 13 }}>
-                    {error}
-                  </div>
-                )}
-
-                {(() => {
-                  const ruleTcEntries = testCases
-                    .map((tc, idx) => ({ tc, idx }))
-                    .filter(({ tc }) => tc.source_category === 'policy_rule');
-                  if (ruleTcEntries.length === 0) return null;
-                  const unsavedCount = ruleTcEntries.filter(({ idx }) => selectedTcIdx.has(idx) && !savedTcIdx.has(idx)).length;
-                  return (
-                    <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <button onClick={() => handleSaveTestCases(['policy_rule'])} disabled={savingRuleTc || unsavedCount === 0}>
-                          {savingRuleTc ? '저장 중...' : `선택한 ${unsavedCount}개를 Test Case에 저장`}
-                        </button>
-                        {saveRuleTcMessage && <span style={{ fontSize: 13, color: '#2a8f4d' }}>{saveRuleTcMessage}</span>}
-                      </div>
-                      {ruleTcEntries.map(({ tc, idx }) => {
-                        const stepLines = tc.steps.split('\n').filter(Boolean);
-                        const isSaved = savedTcIdx.has(idx);
-                        return (
-                          <div key={idx} style={{ border: '1px solid #ddd', borderRadius: 8, padding: '16px 18px', background: isSaved ? '#f7f7f7' : '#fff', display: 'flex', gap: 12, opacity: isSaved ? 0.7 : 1 }}>
-                            <input type="checkbox" checked={selectedTcIdx.has(idx)} onChange={() => toggleTc(idx)} disabled={isSaved} style={{ marginTop: 4 }} />
-                            <div style={{ flex: 1 }}>
-                              <div style={{ marginBottom: 12 }}>
-                                <span style={{ background: '#fdf1e0', color: '#c77700', fontSize: 12, padding: '3px 10px', borderRadius: 4, marginRight: 8 }}>{tc.priority}</span>
-                                {tc.source_category && (
-                                  <span style={{ background: '#f2f2f2', color: SOURCE_CATEGORY_META[tc.source_category].color, fontSize: 11.5, padding: '3px 10px', borderRadius: 4, marginRight: 8 }}>
-                                    {SOURCE_CATEGORY_META[tc.source_category].label}
-                                  </span>
-                                )}
-                                {isSaved && <span style={{ background: '#eee', color: '#888', fontSize: 12, padding: '3px 10px', borderRadius: 4, marginRight: 8 }}>저장됨</span>}
-                                <span style={{ fontSize: 15, fontWeight: 600 }}>{tc.title}</span>
-                              </div>
-                              {tc.source_snippet && (
-                                <p style={{ fontSize: 12, color: '#888', margin: '0 0 10px', background: '#fafafa', border: '1px solid #eee', borderRadius: 4, padding: '6px 10px' }}>
-                                  📎 근거: {tc.source_snippet}
-                                </p>
-                              )}
-                              <p style={{ fontSize: 12, color: '#999', margin: '0 0 4px' }}>사전조건</p>
-                              <p style={{ fontSize: 14, color: '#333', margin: '0 0 14px' }}>{tc.precondition}</p>
-                              <p style={{ fontSize: 12, color: '#999', margin: '0 0 4px' }}>테스트 절차</p>
-                              <div style={{ fontSize: 14, color: '#333', margin: '0 0 14px', lineHeight: 1.8 }}>
-                                {stepLines.map((line, i) => (<div key={i}>{line}</div>))}
-                              </div>
-                              <p style={{ fontSize: 12, color: '#999', margin: '0 0 4px' }}>기대 결과</p>
-                              <p style={{ fontSize: 14, color: '#333', margin: 0 }}>{tc.expected_result}</p>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })()}
+              <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px dashed #ddd', fontSize: 12.5, color: '#555', background: '#f0f5fa', border: '1px solid #dde6ee', borderRadius: 6, padding: '10px 12px', lineHeight: 1.6 }}>
+                "👍 맞음"으로 확인한 규칙 {selectedRuleIdx.size}개는 ④ 예외 케이스 탭에서 TC를 생성할 때
+                이 프로젝트만의 규칙으로 자동 반영됩니다. 여기서 TC를 따로 만들 필요는 없어요.
               </div>
             )}
           </div>
@@ -1545,6 +1424,11 @@ function handleExportIssuesExcel() {
             {rules.length === 0 && (
               <p style={{ fontSize: 12, color: '#c77700', marginBottom: 6 }}>
                 ⚠ 아직 "요구사항 정책·제한사항 분석"을 하지 않았어요. 먼저 분석하면 이 프로젝트만의 특이 예외가 TC에 반영돼서 퀄리티가 더 좋아져요.
+              </p>
+            )}
+            {rules.length > 0 && (
+              <p style={{ fontSize: 12, color: '#2a8f4d', marginBottom: 6 }}>
+                ✓ "👍 맞음"으로 확인된 규칙 {selectedRuleIdx.size}개가 이 프로젝트만의 특이 예외로 함께 반영됩니다.
               </p>
             )}
             <button
