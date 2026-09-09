@@ -32,6 +32,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 // 유형 -> 스킬 MD 파일 매핑 (필요시 파일 추가하면서 확장)
 const SKILL_MAP = {
   '쇼핑몰': 'shopping-mall-tc-skill.md',
+  '포인트/멤버십형 서비스': 'point-membership-tc-skill.md',
   '내부 관리 시스템': 'internal-system-tc-skill.md',
   '웹/게임 소개': 'website-tc-skill.md',
 };

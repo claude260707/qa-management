@@ -363,6 +363,15 @@ function handleSelectAllRulesCorrect() {
   persistState({ rules: updated });
 }
 
+// "전체 선택"의 반대 동작 - 선택 해제뿐 아니라 맞음/틀림 판단 자체를 초기화해서
+// 두 상태(selectedRuleIdx / rules[].confirmed)가 다시 어긋나지 않게 함
+function handleDeselectAllRules() {
+  const updated = rules.map((r) => ({ ...r, confirmed: null, needsReview: false }));
+  setRules(updated);
+  setSelectedRuleIdx(new Set());
+  persistState({ rules: updated });
+}
+
 function handleExportIssuesExcel() {
   if (issues.length === 0) return;
   const rows = issues.map((issue, i) => ({
@@ -460,10 +469,38 @@ function handleExportIssuesExcel() {
     setClassifying(true);
     try {
       const result = await planAnalysisApi.classifyType(requirementText);
-      setProjectType(result.type);
-      setReason(result.reason);
-      setServiceName(result.serviceName || '');
-      persistState({ projectType: result.type, reason: result.reason, serviceName: result.serviceName || '' });
+      const typeChanged = projectType !== '' && projectType !== result.type;
+
+      // 유형이 바뀌면, 예외 케이스 체크리스트(②)는 이전 유형의 스킬 기준으로 생성된 것이라
+      // 그대로 두면 안 맞음. 사용자에게 알리고 동의하면 초기화 - 동의 안 하면 유형 갱신도 취소.
+      if (typeChanged && checklist.length > 0) {
+        const proceed = window.confirm(
+          `유형이 "${projectType}"에서 "${result.type}"(으)로 변경됩니다.\n` +
+          `기존 유형 기준으로 만들어진 예외 케이스 체크리스트(${checklist.length}건)가 더 이상 맞지 않아 초기화됩니다.\n` +
+          `계속할까요?`
+        );
+        if (!proceed) {
+          setClassifying(false);
+          return;
+        }
+        setChecklist([]);
+        setSelectedGaps(new Set());
+        setSelectedSatisfied(new Set());
+        setExpandedChecklist(new Set());
+        setChecklistChanges({});
+        setProjectType(result.type);
+        setReason(result.reason);
+        setServiceName(result.serviceName || '');
+        persistState({
+          projectType: result.type, reason: result.reason, serviceName: result.serviceName || '',
+          checklist: [],
+        });
+      } else {
+        setProjectType(result.type);
+        setReason(result.reason);
+        setServiceName(result.serviceName || '');
+        persistState({ projectType: result.type, reason: result.reason, serviceName: result.serviceName || '' });
+      }
     } catch (err: any) {
       setError(err.message || '유형 판별 중 오류가 발생했습니다.');
     } finally {
@@ -1136,10 +1173,7 @@ function handleExportIssuesExcel() {
                 <button onClick={handleSelectAllRulesCorrect} style={{ fontSize: 12, padding: '2px 8px' }}>
                   맞음 전체 선택
                 </button>
-                <button onClick={() => setSelectedRuleIdx(new Set(rules.map((_, idx) => idx)))} style={{ fontSize: 12, padding: '2px 8px' }}>
-                  전체 선택
-                </button>
-                <button onClick={() => setSelectedRuleIdx(new Set())} style={{ fontSize: 12, padding: '2px 8px' }}>
+                <button onClick={handleDeselectAllRules} style={{ fontSize: 12, padding: '2px 8px' }}>
                   전체 해제
                 </button>
               </div>
