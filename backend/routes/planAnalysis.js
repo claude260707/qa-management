@@ -111,7 +111,7 @@ router.post('/extract-features', async (req, res) => {
     if (!planText) return res.status(400).json({ error: 'planText가 필요합니다.' });
 
     const blocks = [buildPlanTextBlock(planText), { type: 'text', text: buildFeatureExtractionPrompt() }];
-    const raw = await callClaude(blocks, { label: 'extract-features' });
+    const raw = await callClaude(blocks, { maxTokens: 8000, label: 'extract-features' });
     const parsed = parseFeatureExtractionResult(raw);
 
     const normalizedPlanText = normalizeForMatch(planText);
