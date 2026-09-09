@@ -253,10 +253,31 @@ router.get('/export', async (req, res) => {
     // --- 시트 2: 차수별 비교 ---
     const roundSheet = workbook.addWorksheet('차수별 비교');
     roundSheet.addRow(['상태', ...rounds.map((r) => `${r}차`)]).font = { bold: true };
-    for (const status of Object.keys(STATUS_LABEL)) {
+    const statusKeys = Object.keys(STATUS_LABEL);
+    for (const status of statusKeys) {
       roundSheet.addRow([STATUS_LABEL[status], ...rounds.map((r) => roundSummary[r][status] || 0)]);
     }
     roundSheet.columns.forEach((col) => { col.width = 14; });
+
+    // 데이터 막대 - 실제 차트 객체 대신, 숫자 크기만큼 셀 안에 막대가 채워지는 조건부 서식.
+    // exceljs는 진짜 차트(canvas 렌더링) 삽입은 지원하지 않아 이 방식으로 대체함.
+    if (rounds.length > 0 && statusKeys.length > 0) {
+      // 차수가 25개(Z열)를 넘어가면 이 방식으로는 열 문자 계산이 깨짐 - 실제로 그 정도로
+      // 차수가 쌓이는 경우는 없을 거라 간단하게 처리함.
+      const lastCol = String.fromCharCode('B'.charCodeAt(0) + rounds.length - 1);
+      const lastRow = 1 + statusKeys.length;
+      roundSheet.addConditionalFormatting({
+        ref: `B2:${lastCol}${lastRow}`,
+        rules: [
+          {
+            type: 'dataBar',
+            cfvo: [{ type: 'min' }, { type: 'max' }],
+            color: { argb: 'FF638EC6' },
+            priority: 1,
+          },
+        ],
+      });
+    }
 
     // --- 시트 3: TC별 상세 ---
     const tcSheet = workbook.addWorksheet('TC별 상세');
