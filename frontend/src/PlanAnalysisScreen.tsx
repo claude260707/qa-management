@@ -41,6 +41,7 @@ interface GeneratedTc {
   expected_result: string;
   source_category?: 'exception_gap' | 'satisfied_check' | 'policy_rule' | 'consistency_issue' | 'basic_function';
   source_snippet?: string;
+  based_on_rule?: string;
 }
 
 const SOURCE_CATEGORY_META: Record<NonNullable<GeneratedTc['source_category']>, { label: string; color: string }> = {
@@ -765,6 +766,9 @@ function handleExportIssuesExcel() {
     setGeneratingTc(true);
     try {
       const rulesToSend = rules.filter((_, idx) => selectedRuleIdx.has(idx));
+      const confirmedIssuesToSend = issues
+        .filter((iss) => iss.confirmedValue?.trim())
+        .map((iss) => ({ title: iss.title, question: iss.question, confirmedValue: iss.confirmedValue as string }));
       const gapList = Array.from(selectedGaps);
       const satisfiedItems = checklist
         .filter((i) => selectedSatisfied.has(i.label))
@@ -786,9 +790,9 @@ function handleExportIssuesExcel() {
       const warnings: string[] = [];
       for (let i = 0; i < batches.length; i++) {
         setGenerateProgress(`TC 생성 중... (${++batchDone}/${totalBatches}배치 · 누락 의심)`);
-        // rulesToSend는 "이 프로젝트만의 특이 예외"를 누락 항목 TC에 반영하기 위한 참고 자료로 계속 전달
-        // (정책 규칙 자체의 검증 TC는 별도로 "정책·제한사항 분석" 탭에서 생성됨)
-        const result = await planAnalysisApi.generateTc(designText, projectType, batches[i], rulesToSend);
+        // rulesToSend/confirmedIssuesToSend는 "이 프로젝트만의 특이 예외"와 "확정된 정합성 이슈"를
+        // 누락 항목 TC에 반영하기 위한 참고 자료로 계속 전달 (해당 탭들은 별도로 TC를 생성하지 않음)
+        const result = await planAnalysisApi.generateTc(designText, projectType, batches[i], rulesToSend, confirmedIssuesToSend);
         if (result.testCases.length === 0 && result.warning) warnings.push(result.warning);
         newResults = newResults.concat(attributeSource(result.testCases, batches[i], 2, 'exception_gap', (label) => label));
       }
@@ -1092,7 +1096,7 @@ function handleExportIssuesExcel() {
           )}
         {requirementText.trim() && (
           <div style={{ marginBottom: 16, fontSize: 12.5, color: '#555', background: '#f0f5fa', border: '1px solid #dde6ee', borderRadius: 6, padding: '10px 12px', lineHeight: 1.6 }}>
-            <b>② 정책·제한사항 분석</b> → 이 프로젝트만의 특이 규칙을 찾아 검증 TC 생성. 생성된 TC는 이 탭 안에서 바로 확인·저장할 수 있어요.
+            <b>② 정책·제한사항 분석</b> → 이 프로젝트만의 특이 규칙을 찾아 "맞음/틀림"으로 검증합니다. "맞음"으로 확인한 규칙은 ④ 예외 케이스 탭에서 TC를 생성할 때 자동으로 반영돼요. 이 탭에서 직접 TC를 만들지는 않아요.
           </div>
         )}
         {/* 2.5. 기획서 정책·제한사항 분석 (요구사항 문서 기준) */}
@@ -1201,7 +1205,7 @@ function handleExportIssuesExcel() {
         {/* 안내 - 이 탭에서 할 수 있는 것 */}
         {designText.trim() && (
           <div style={{ marginBottom: 16, fontSize: 12.5, color: '#555', background: '#f0f5fa', border: '1px solid #dde6ee', borderRadius: 6, padding: '10px 12px', lineHeight: 1.6 }}>
-            <b>③ 정합성 검수</b> → 요구사항 문서와 화면설계서를 비교해서 값 불일치/문서 내부 모순/근거 없는 항목을 찾아 검증 TC 생성. 생성된 TC는 이 탭 안에서 바로 확인·저장할 수 있어요.
+            <b>③ 정합성 검수</b> → 요구사항 문서와 화면설계서를 비교해서 값 불일치/문서 내부 모순/근거 없는 항목을 찾아냅니다. 담당자에게 확인해서 "확정값"을 입력해두면 기획서 자체의 애매함을 정리하는 단계예요. (이 탭에서 TC를 생성하지는 않아요)
           </div>
         )}
 
@@ -1431,6 +1435,11 @@ function handleExportIssuesExcel() {
                 ✓ "👍 맞음"으로 확인된 규칙 {selectedRuleIdx.size}개가 이 프로젝트만의 특이 예외로 함께 반영됩니다.
               </p>
             )}
+            {issues.filter((i) => i.confirmedValue?.trim()).length > 0 && (
+              <p style={{ fontSize: 12, color: '#2a6f8f', marginBottom: 6 }}>
+                ✓ 정합성 검수에서 확정값을 입력한 이슈 {issues.filter((i) => i.confirmedValue?.trim()).length}건이 함께 반영됩니다.
+              </p>
+            )}
             <button
               onClick={handleGenerateTc}
               disabled={generatingTc || (selectedGaps.size === 0 && selectedSatisfied.size === 0)}
@@ -1491,8 +1500,18 @@ function handleExportIssuesExcel() {
                           {SOURCE_CATEGORY_META[tc.source_category].label}
                         </span>
                       )}
+                      {tc.based_on_rule && (
+                        <span style={{ background: '#faf7ff', color: '#a35ec2', fontSize: 11.5, padding: '3px 10px', borderRadius: 4, marginRight: 8, border: '1px solid #e8dff5' }}>
+                          📋 규칙/확정값 반영
+                        </span>
+                      )}
                       <span style={{ fontSize: 15, fontWeight: 600 }}>{tc.title}</span>
                     </div>
+                    {tc.based_on_rule && (
+                      <p style={{ fontSize: 12, color: '#a35ec2', margin: '0 0 6px', background: '#faf7ff', border: '1px solid #e8dff5', borderRadius: 4, padding: '6px 10px' }}>
+                        📋 반영된 규칙/확정값: {tc.based_on_rule}
+                      </p>
+                    )}
                     {tc.source_snippet && (
                       <p style={{ fontSize: 12, color: '#888', margin: '0 0 10px', background: '#fafafa', border: '1px solid #eee', borderRadius: 4, padding: '6px 10px' }}>
                         📎 근거: {tc.source_snippet}

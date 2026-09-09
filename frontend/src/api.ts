@@ -311,15 +311,16 @@ export const planAnalysisApi = {
     planText: string,
     projectType: string,
     selectedGapLabels: string[],
-    extractedRules: { summary: string; source: string; risk: string; verify: string }[] = []
+    extractedRules: { summary: string; source: string; risk: string; verify: string }[] = [],
+    confirmedIssues: { title: string; question: string; confirmedValue: string }[] = []
   ): Promise<{
-    testCases: { title: string; priority: string; precondition: string; steps: string; expected_result: string }[];
+    testCases: { title: string; priority: string; precondition: string; steps: string; expected_result: string; based_on_rule?: string }[];
     warning?: string;
   }> =>
     fetch(`${BASE_URL}/plan/generate-tc`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ planText, projectType, selectedGapLabels, extractedRules }),
+      body: JSON.stringify({ planText, projectType, selectedGapLabels, extractedRules, confirmedIssues }),
     }).then(handle),
 
   generateSatisfiedTc: (
