@@ -90,9 +90,11 @@ function normalizeForMatch(s) {
 // 반대로 아예 다른 화면/기능을 지어낸 경우는 겹치는 조각이 거의 없어 이 기준을 통과하지 못한다.
 function isEvidenceGrounded(evidence, normalizedPlanText) {
   const ev = normalizeForMatch(evidence);
-  if (ev.length < 6) return false; // 너무 짧으면 판단 근거로 신뢰하기 어려움
-  if (normalizedPlanText.includes(ev)) return true; // 완전 일치 - 가장 확실한 케이스
+  if (!ev) return false; // 빈 값이면 근거가 없는 것
+  if (normalizedPlanText.includes(ev)) return true; // 완전 일치 - "더보기"처럼 짧은 문구도 여기서 바로 통과됨
 
+  // 아래 유사도 체크는 WINDOW(10자) 이상인 인용문에만 의미가 있음 - 그보다 짧은데
+  // 완전 일치도 아니었다면 원문에 없는 것으로 판단.
   const WINDOW = 10;
   const STRIDE = 5;
   let windows = 0;
@@ -101,7 +103,7 @@ function isEvidenceGrounded(evidence, normalizedPlanText) {
     windows++;
     if (normalizedPlanText.includes(ev.slice(i, i + WINDOW))) hits++;
   }
-  if (windows === 0) return false; // WINDOW보다 짧은데 완전 일치도 아니었던 경우
+  if (windows === 0) return false;
   return hits / windows >= 0.6; // 60% 이상 겹치면 원문 근거가 있다고 판단
 }
 
