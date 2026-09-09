@@ -183,6 +183,8 @@ export default function PlanAnalysisScreen({ embeddedProjectId, onStepChange, ac
   const [selectedSatisfied, setSelectedSatisfied] = useState<Set<string>>(new Set());
   const [expandedChecklist, setExpandedChecklist] = useState<Set<string>>(new Set());
   const [expandedTcGroups, setExpandedTcGroups] = useState<Set<string>>(new Set());
+  const [missingSectionOpen, setMissingSectionOpen] = useState(true);
+  const [satisfiedSectionOpen, setSatisfiedSectionOpen] = useState(true);
   const [checklistChanges, setChecklistChanges] = useState<Record<string, boolean>>({});
 
   // --- TC 생성 (예외 케이스 탭: 누락의심 + 충족항목) ---
@@ -1375,8 +1377,10 @@ function handleExportIssuesExcel() {
                   </button>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {checklist.map((item) => {
+                {(() => {
+                  const missingItems = checklist.filter((i) => i.missing);
+                  const satisfiedItems = checklist.filter((i) => !i.missing);
+                  const renderItem = (item: (typeof checklist)[number]) => {
                     const isExpanded = expandedChecklist.has(item.label);
                     const prevMissing = checklistChanges[item.label];
                     const changed = prevMissing !== undefined;
@@ -1405,9 +1409,6 @@ function handleExportIssuesExcel() {
                             )}
                           </span>
                           <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <span style={{ color: item.missing ? '#c77700' : '#2a8f4d', fontSize: 12 }}>
-                              {item.status}
-                            </span>
                             <button
                               onClick={(e) => { e.preventDefault(); toggleChecklistExpand(item.label); }}
                               style={{ fontSize: 11, padding: '2px 8px' }}
@@ -1423,8 +1424,52 @@ function handleExportIssuesExcel() {
                         )}
                       </div>
                     );
-                  })}
-                </div>
+                  };
+
+                  return (
+                    <>
+                      <div style={{ border: '1px solid #f0dcb8', borderRadius: 6, marginBottom: 10 }}>
+                        <button
+                          onClick={() => setMissingSectionOpen((v) => !v)}
+                          style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#fffaf0', border: 'none', borderRadius: 6, cursor: 'pointer', textAlign: 'left' }}
+                        >
+                          <span style={{ fontSize: 13 }}>{missingSectionOpen ? '▾' : '▸'}</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: '#c77700' }}>누락 의심 ({missingItems.length})</span>
+                          <span style={{ fontSize: 12, color: '#999', marginLeft: 'auto' }}>선택 {selectedGaps.size}개</span>
+                        </button>
+                        {missingSectionOpen && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 10px 10px' }}>
+                            {missingItems.length === 0 ? (
+                              <p style={{ fontSize: 12, color: '#999', margin: 0 }}>누락 의심 항목이 없습니다.</p>
+                            ) : (
+                              missingItems.map(renderItem)
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ border: '1px solid #cfe3d8', borderRadius: 6 }}>
+                        <button
+                          onClick={() => setSatisfiedSectionOpen((v) => !v)}
+                          style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#f5fbf7', border: 'none', borderRadius: 6, cursor: 'pointer', textAlign: 'left' }}
+                        >
+                          <span style={{ fontSize: 13 }}>{satisfiedSectionOpen ? '▾' : '▸'}</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: '#2a8f4d' }}>충족 ({satisfiedItems.length})</span>
+                          <span style={{ fontSize: 12, color: '#999', marginLeft: 'auto' }}>선택 {selectedSatisfied.size}개</span>
+                        </button>
+                        {satisfiedSectionOpen && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 10px 10px' }}>
+                            {satisfiedItems.length === 0 ? (
+                              <p style={{ fontSize: 12, color: '#999', margin: 0 }}>충족 항목이 없습니다.</p>
+                            ) : (
+                              satisfiedItems.map(renderItem)
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  );
+                })()}
               </>
             )}
           </div>
