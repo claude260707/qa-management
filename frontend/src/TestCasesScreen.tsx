@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Project, Requirement, TestCase, TestCaseInput, TestCaseBulkItem, TestCasePriority, TestCaseStatus, Attachment } from './types';
+import type { Project, Requirement, TestCase, TestCaseInput, TestCaseBulkItem, TestCaseStatus, Attachment } from './types';
 
 import { REQ_PRIORITY_LABEL, TC_STATUS_LABEL, STATUS_LABEL } from './types';
 import { projectsApi, requirementsApi, testCasesApi, attachmentsApi } from './api';
