@@ -591,7 +591,9 @@ function handleExportIssuesExcel() {
       setSelectedFeatureIdx(new Set(result.features.map((_, idx) => idx)));
       setDroppedFeatures(result.droppedFeatures || []);
       persistState({ features: result.features, draftBasicTestCases: [], savedBasicTcIdx: [] });
-      if (result.droppedCount && result.droppedCount > 0) {
+      if (result.verificationSkipped) {
+        setError('근거 검증이 정상 동작하지 않아(AI가 인용문을 채우지 않음) 이번엔 검증 없이 전체 목록을 보여줍니다. 목록을 직접 검토해서 화면설계서에 실제로 없는 기능은 체크 해제해주세요.');
+      } else if (result.droppedCount && result.droppedCount > 0) {
         setError(`${result.droppedCount}개 기능은 근거 문구를 원본 문서에서 찾을 수 없어 자동으로 제외했습니다.`);
       }
     } catch (err: any) {

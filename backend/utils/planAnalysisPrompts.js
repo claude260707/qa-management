@@ -176,8 +176,15 @@ function buildFeatureExtractionPrompt() {
 - 순수 디자인 가이드(색상/폰트/여백 등 비주얼 스타일만 다루는 내용)
 - 용어 정의, 참고 자료 링크
 
+작성 순서(반드시 이 순서로): 기능명을 먼저 정하지 말고, 먼저 문서를 훑으면서 "기능 단위"를
+설명하는 문구를 찾아 그대로 인용해([EVIDENCE]), 그 다음에 그 인용문을 근거로 기능명과
+설명을 적어([NAME], [DESC]). 인용할 문구를 못 찾겠으면 그 기능은 통째로 목록에서 빼고
+다음으로 넘어가 - [EVIDENCE]를 비워둔 채로 [NAME]/[DESC]만 적는 것은 절대 허용 안 됨.
+"이런 종류의 서비스라면 보통 있겠지"라는 일반적인 가정으로 기능을 만들어내는 것도 금지.
+
 중요: 각 기능마다 아래 형식으로, 개수만큼 반복해서 답변해줘. 다른 설명은 붙이지 마.
 [FEATURE_START]
+[EVIDENCE]: (이 기능이 언급된 문서 내 문구를 그대로 인용 - 반드시 먼저 작성)
 [NAME]: (기능명, 간결하게)
 [DESC]: (이 기능이 정상적으로 하는 일을 한 문장으로)
 [FEATURE_END]`;
@@ -189,9 +196,11 @@ function parseFeatureExtractionResult(text) {
     const block = b[1];
     const name = block.match(/\[NAME\]:\s*(.+)/);
     const desc = block.match(/\[DESC\]:\s*(.+)/);
+    const evidence = block.match(/\[EVIDENCE\]:\s*(.+)/);
     return {
       name: name ? name[1].trim() : '',
       desc: desc ? desc[1].trim() : '',
+      evidence: evidence ? evidence[1].trim() : '',
     };
   });
 }

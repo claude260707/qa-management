@@ -115,13 +115,24 @@ router.post('/extract-features', async (req, res) => {
     const parsed = parseFeatureExtractionResult(raw);
 
     const normalizedPlanText = normalizeForMatch(planText);
-    const features = parsed.filter((f) => isEvidenceGrounded(f.evidence, normalizedPlanText));
-    const droppedFeatures = parsed
-      .filter((f) => !isEvidenceGrounded(f.evidence, normalizedPlanText))
-      .slice(0, 50)
-      .map((f) => ({ name: f.name, evidence: f.evidence || '(빈 값)' }));
+    const grounded = parsed.filter((f) => isEvidenceGrounded(f.evidence, normalizedPlanText));
 
-    res.json({ features, droppedCount: droppedFeatures.length, droppedFeatures });
+    // 안전장치: 추출된 기능이 있는데 근거 검증을 통과한 게 0개면, 이건 실제로 전부
+    // 지어낸 것이라기보다 AI가 EVIDENCE 필드 자체를 채우지 않는 등 검증이 오작동하는
+    // 신호일 가능성이 높다. 이 경우 필터링을 포기하고 원본 목록을 그대로 반환해서,
+    // 최소한 사람이 직접 검토할 수 있는 결과는 남긴다.
+    const filterMalfunctioned = parsed.length > 0 && grounded.length === 0;
+    const features = filterMalfunctioned ? parsed : grounded;
+    const droppedFeatures = filterMalfunctioned
+      ? []
+      : parsed.filter((f) => !isEvidenceGrounded(f.evidence, normalizedPlanText)).slice(0, 50).map((f) => ({ name: f.name, evidence: f.evidence || '(빈 값)' }));
+
+    res.json({
+      features,
+      droppedCount: droppedFeatures.length,
+      droppedFeatures,
+      verificationSkipped: filterMalfunctioned,
+    });
   } catch (err) {
     console.error('extract-features error:', err);
     res.status(500).json({ error: err.isTruncated ? err.message : '기능 목록 추출 중 오류가 발생했습니다.' });
