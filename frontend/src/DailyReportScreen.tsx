@@ -117,9 +117,19 @@ export default function DailyReportScreen({ projectId }: Props) {
           <span className="daily-report-round">{report.round}차 진행 중</span>
           <span className="daily-report-date"> · {report.date}</span>
         </div>
-        <button onClick={handleAdvanceRound} disabled={advancing}>
-          {advancing ? '진행 중...' : '다음 차수 시작'}
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <a
+            href={dailyReportApi.exportUrl(projectId, { round: report.round, date: report.date })}
+            download
+            className="btn-ghost"
+            style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}
+          >
+            📥 엑셀 다운로드
+          </a>
+          <button onClick={handleAdvanceRound} disabled={advancing}>
+            {advancing ? '진행 중...' : '다음 차수 시작'}
+          </button>
+        </div>
       </div>
 
       <div className="daily-report-kpis">

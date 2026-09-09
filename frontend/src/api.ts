@@ -255,6 +255,12 @@ export const dailyReportApi = {
   },
   getDetail: (projectId: number): Promise<DailyReportDetail> =>
     fetch(`${BASE_URL}/daily-report/detail?project_id=${projectId}`).then(handle),
+  exportUrl: (projectId: number, params?: { date?: string; round?: number }): string => {
+    const qs = new URLSearchParams({ project_id: String(projectId) });
+    if (params?.date) qs.set('date', params.date);
+    if (params?.round) qs.set('round', String(params.round));
+    return `${BASE_URL}/daily-report/export?${qs.toString()}`;
+  },
 };
 
 
