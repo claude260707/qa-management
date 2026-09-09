@@ -268,7 +268,7 @@ export const planAnalysisApi = {
 
   extractFeatures: (
     planText: string
-  ): Promise<{ features: { name: string; desc: string }[] }> =>
+  ): Promise<{ features: { name: string; desc: string; evidence?: string }[]; droppedCount?: number }> =>
     fetch(`${BASE_URL}/plan/extract-features`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -344,7 +344,7 @@ export const planAnalysisApi = {
     serviceName: string;
     rules: { summary: string; source: string; risk: string; verify: string }[];
     checklist: { label: string; status: string; missing: boolean; note: string }[];
-    features: { name: string; desc: string }[];
+    features: { name: string; desc: string; evidence?: string }[];
     consistencyIssues: {
       category: 'mismatch' | 'internal_contradiction' | 'no_basis';
       categoryLabel: string;
@@ -388,7 +388,7 @@ export const planAnalysisApi = {
       serviceName: string;
       rules: { summary: string; source: string; risk: string; verify: string }[];
       checklist: { label: string; status: string; missing: boolean; note: string }[];
-      features: { name: string; desc: string }[];
+      features: { name: string; desc: string; evidence?: string }[];
       consistencyIssues: {
         category: 'mismatch' | 'internal_contradiction' | 'no_basis';
         categoryLabel: string;

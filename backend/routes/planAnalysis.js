@@ -80,6 +80,10 @@ async function callClaude(contentBlocks, { model = 'claude-sonnet-5', maxTokens 
 }
 
 // 신규 - 독립 기능: 기획서에서 조작 가능한 기능 단위만 추출 (정책분석/체크리스트와 무관)
+function normalizeForMatch(s) {
+  return (s || '').replace(/\s+/g, '').toLowerCase();
+}
+
 router.post('/extract-features', async (req, res) => {
   try {
     const { planText } = req.body;
@@ -87,8 +91,18 @@ router.post('/extract-features', async (req, res) => {
 
     const blocks = [buildPlanTextBlock(planText), { type: 'text', text: buildFeatureExtractionPrompt() }];
     const raw = await callClaude(blocks, { label: 'extract-features' });
-    const features = parseFeatureExtractionResult(raw);
-    res.json({ features });
+    const parsed = parseFeatureExtractionResult(raw);
+
+    // AI가 "근거"라고 적은 인용문을 그대로 믿지 않고, 실제로 원본 문서 안에 그 문구가
+    // 있는지 코드로 직접 대조한다. 못 찾으면 인용문까지 지어낸 것이므로 통째로 제외.
+    const normalizedPlanText = normalizeForMatch(planText);
+    const features = parsed.filter((f) => {
+      const normalizedEvidence = normalizeForMatch(f.evidence);
+      return normalizedEvidence.length > 0 && normalizedPlanText.includes(normalizedEvidence);
+    });
+    const droppedCount = parsed.length - features.length;
+
+    res.json({ features, droppedCount });
   } catch (err) {
     console.error('extract-features error:', err);
     res.status(500).json({ error: err.isTruncated ? err.message : '기능 목록 추출 중 오류가 발생했습니다.' });

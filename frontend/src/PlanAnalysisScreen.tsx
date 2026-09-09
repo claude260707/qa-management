@@ -164,7 +164,7 @@ export default function PlanAnalysisScreen({ embeddedProjectId, onStepChange, ac
 
   // --- 기본 기능(정상 케이스) TC 생성 - 화면설계서 기준, 독립 실행 ---
   const [extractingFeatures, setExtractingFeatures] = useState(false);
-  const [features, setFeatures] = useState<{ name: string; desc: string }[]>([]);
+  const [features, setFeatures] = useState<{ name: string; desc: string; evidence?: string }[]>([]);
   const [selectedFeatureIdx, setSelectedFeatureIdx] = useState<Set<number>>(new Set());
   const [generatingBasicTc, setGeneratingBasicTc] = useState(false);
   const [generateBasicProgress, setGenerateBasicProgress] = useState('');
@@ -572,14 +572,26 @@ function handleExportIssuesExcel() {
       setError('화면설계서 내용이 없습니다. 파일을 업로드하거나 텍스트를 붙여넣어 주세요.');
       return;
     }
+    if (features.length > 0) {
+      const proceed = window.confirm(
+        '기능 목록을 다시 추출하면, 지금까지 만들어둔 기본 기능 TC 초안이 초기화됩니다(이미 Test Case에 저장한 항목은 그대로 남아있어요). 계속할까요?'
+      );
+      if (!proceed) return;
+    }
     setError('');
     setExtractingFeatures(true);
     setBasicTestCases([]);
+    setSelectedBasicTcIdx(new Set());
+    setSavedBasicTcIdx(new Set());
+    setCompletedFeatureIdx(new Set());
     try {
       const result = await planAnalysisApi.extractFeatures(designText);
       setFeatures(result.features);
       setSelectedFeatureIdx(new Set(result.features.map((_, idx) => idx)));
-      persistState({ features: result.features });
+      persistState({ features: result.features, draftBasicTestCases: [], savedBasicTcIdx: [] });
+      if (result.droppedCount && result.droppedCount > 0) {
+        setError(`${result.droppedCount}개 기능은 근거 문구를 원본 문서에서 찾을 수 없어 자동으로 제외했습니다.`);
+      }
     } catch (err: any) {
       setError(err.message || '기능 목록 추출 중 오류가 발생했습니다.');
     } finally {
@@ -1635,8 +1647,8 @@ function handleExportIssuesExcel() {
               화면설계서에 정의된 기능들이 "정상적으로 잘 동작하는지" 확인하는 TC를 만듭니다. 예외/에러 상황은 다루지 않아요.
             </p>
 
-            <button onClick={handleExtractFeatures} disabled={extractingFeatures || !designText.trim() || features.length > 0}>
-              {extractingFeatures ? '추출 중...' : features.length > 0 ? 'TC 생성 목록 확인 완료' : 'TC 생성 목록 확인'}
+            <button onClick={handleExtractFeatures} disabled={extractingFeatures || !designText.trim()}>
+              {extractingFeatures ? '추출 중...' : features.length > 0 ? '기능 목록 다시 추출' : 'TC 생성 목록 확인'}
             </button>
 
             {features.length > 0 && (
@@ -1691,6 +1703,11 @@ function handleExportIssuesExcel() {
                             )}
                           </p>
                           <p style={{ color: '#888', margin: '4px 0 0', fontSize: 12 }}>{f.desc}</p>
+                          {f.evidence && (
+                            <p style={{ color: '#a35ec2', margin: '4px 0 0', fontSize: 11.5, background: '#faf7ff', border: '1px solid #e8dff5', borderRadius: 4, padding: '4px 8px' }}>
+                              📎 근거: "{f.evidence}"
+                            </p>
+                          )}
                         </div>
                       </label>
                     );
