@@ -182,6 +182,7 @@ export default function PlanAnalysisScreen({ embeddedProjectId, onStepChange, ac
   const [selectedGaps, setSelectedGaps] = useState<Set<string>>(new Set());
   const [selectedSatisfied, setSelectedSatisfied] = useState<Set<string>>(new Set());
   const [expandedChecklist, setExpandedChecklist] = useState<Set<string>>(new Set());
+  const [expandedTcGroups, setExpandedTcGroups] = useState<Set<string>>(new Set());
   const [checklistChanges, setChecklistChanges] = useState<Record<string, boolean>>({});
 
   // --- TC 생성 (예외 케이스 탭: 누락의심 + 충족항목) ---
@@ -735,6 +736,15 @@ function handleExportIssuesExcel() {
     });
   }
 
+  function toggleTcGroup(key: string) {
+    setExpandedTcGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
   function toggleGap(label: string) {
     setSelectedGaps((prev) => {
       const next = new Set(prev);
@@ -766,9 +776,6 @@ function handleExportIssuesExcel() {
     setGeneratingTc(true);
     try {
       const rulesToSend = rules.filter((_, idx) => selectedRuleIdx.has(idx));
-      const confirmedIssuesToSend = issues
-        .filter((iss) => iss.confirmedValue?.trim())
-        .map((iss) => ({ title: iss.title, question: iss.question, confirmedValue: iss.confirmedValue as string }));
       const gapList = Array.from(selectedGaps);
       const satisfiedItems = checklist
         .filter((i) => selectedSatisfied.has(i.label))
@@ -790,9 +797,9 @@ function handleExportIssuesExcel() {
       const warnings: string[] = [];
       for (let i = 0; i < batches.length; i++) {
         setGenerateProgress(`TC 생성 중... (${++batchDone}/${totalBatches}배치 · 누락 의심)`);
-        // rulesToSend/confirmedIssuesToSend는 "이 프로젝트만의 특이 예외"와 "확정된 정합성 이슈"를
-        // 누락 항목 TC에 반영하기 위한 참고 자료로 계속 전달 (해당 탭들은 별도로 TC를 생성하지 않음)
-        const result = await planAnalysisApi.generateTc(designText, projectType, batches[i], rulesToSend, confirmedIssuesToSend);
+        // rulesToSend는 "이 프로젝트만의 특이 예외"를 누락 항목 TC에 반영하기 위한 참고 자료로 계속 전달
+        // (정책 규칙 자체는 별도로 TC를 생성하지 않고, 여기서 "맞음" 확인된 것만 함께 반영됨)
+        const result = await planAnalysisApi.generateTc(designText, projectType, batches[i], rulesToSend);
         if (result.testCases.length === 0 && result.warning) warnings.push(result.warning);
         newResults = newResults.concat(attributeSource(result.testCases, batches[i], 2, 'exception_gap', (label) => label));
       }
@@ -1430,16 +1437,6 @@ function handleExportIssuesExcel() {
                 ⚠ 아직 "요구사항 정책·제한사항 분석"을 하지 않았어요. 먼저 분석하면 이 프로젝트만의 특이 예외가 TC에 반영돼서 퀄리티가 더 좋아져요.
               </p>
             )}
-            {rules.length > 0 && (
-              <p style={{ fontSize: 12, color: '#2a8f4d', marginBottom: 6 }}>
-                ✓ "👍 맞음"으로 확인된 규칙 {selectedRuleIdx.size}개가 이 프로젝트만의 특이 예외로 함께 반영됩니다.
-              </p>
-            )}
-            {issues.filter((i) => i.confirmedValue?.trim()).length > 0 && (
-              <p style={{ fontSize: 12, color: '#2a6f8f', marginBottom: 6 }}>
-                ✓ 정합성 검수에서 확정값을 입력한 이슈 {issues.filter((i) => i.confirmedValue?.trim()).length}건이 함께 반영됩니다.
-              </p>
-            )}
             <button
               onClick={handleGenerateTc}
               disabled={generatingTc || (selectedGaps.size === 0 && selectedSatisfied.size === 0)}
@@ -1461,6 +1458,19 @@ function handleExportIssuesExcel() {
             .filter(({ tc }) => tc.source_category === 'exception_gap' || tc.source_category === 'satisfied_check');
           if (gapCheckEntries.length === 0) return null;
           const unsavedCount = gapCheckEntries.filter(({ idx }) => selectedTcIdx.has(idx) && !savedTcIdx.has(idx)).length;
+
+          // 항목(체크리스트 label)별로 묶어서 접기/펼치기 - 생성 결과가 쭉 나열돼 가독성이 떨어지는 문제 개선
+          const groups: { key: string; label: string; entries: { tc: GeneratedTc; idx: number }[] }[] = [];
+          const groupIdxByKey = new Map<string, number>();
+          for (const entry of gapCheckEntries) {
+            const key = `${entry.tc.source_category}::${entry.tc.source_snippet || ''}`;
+            if (!groupIdxByKey.has(key)) {
+              groupIdxByKey.set(key, groups.length);
+              groups.push({ key, label: entry.tc.source_snippet || '(기타)', entries: [] });
+            }
+            groups[groupIdxByKey.get(key)!].entries.push(entry);
+          }
+
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4 }}>
@@ -1473,65 +1483,90 @@ function handleExportIssuesExcel() {
                 {saveMessage && <span style={{ fontSize: 13, color: '#2a8f4d' }}>{saveMessage}</span>}
               </div>
 
-              {gapCheckEntries.map(({ tc, idx }) => {
-                const stepLines = tc.steps.split('\n').filter(Boolean);
-                const isSaved = savedTcIdx.has(idx);
+              {groups.map((group) => {
+                const isExpanded = expandedTcGroups.has(group.key);
+                const selectedCount = group.entries.filter(({ idx }) => selectedTcIdx.has(idx)).length;
+                const savedCount = group.entries.filter(({ idx }) => savedTcIdx.has(idx)).length;
+                const hasRuleBased = group.entries.some(({ tc }) => tc.based_on_rule);
+                const category = group.entries[0].tc.source_category;
                 return (
-                  <div key={idx} style={{ border: '1px solid #ddd', borderRadius: 8, padding: '16px 18px', background: isSaved ? '#f7f7f7' : '#fff', display: 'flex', gap: 12, opacity: isSaved ? 0.7 : 1 }}>
-                    <input
-                      type="checkbox"
-                    checked={selectedTcIdx.has(idx)}
-                    onChange={() => toggleTc(idx)}
-                    disabled={isSaved}
-                    style={{ marginTop: 4 }}
-                  />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ marginBottom: 12 }}>
-                      <span style={{ background: '#fdf1e0', color: '#c77700', fontSize: 12, padding: '3px 10px', borderRadius: 4, marginRight: 8 }}>
-                        {tc.priority}
+                  <div key={group.key} style={{ border: '1px solid #ddd', borderRadius: 8, background: '#fff' }}>
+                    <button
+                      onClick={() => toggleTcGroup(group.key)}
+                      style={{
+                        width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        gap: 10, padding: '10px 14px', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left',
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flex: 1 }}>
+                        <span style={{ fontSize: 13 }}>{isExpanded ? '▾' : '▸'}</span>
+                        {category && (
+                          <span style={{ background: '#f2f2f2', color: SOURCE_CATEGORY_META[category].color, fontSize: 11, padding: '2px 8px', borderRadius: 4 }}>
+                            {SOURCE_CATEGORY_META[category].label}
+                          </span>
+                        )}
+                        {hasRuleBased && (
+                          <span style={{ background: '#faf7ff', color: '#a35ec2', fontSize: 11, padding: '2px 8px', borderRadius: 4, border: '1px solid #e8dff5' }}>
+                            📋 정책 규칙 반영
+                          </span>
+                        )}
+                        <span style={{ fontSize: 13.5, fontWeight: 600 }}>{group.label}</span>
                       </span>
-                      {isSaved && (
-                        <span style={{ background: '#eee', color: '#888', fontSize: 12, padding: '3px 10px', borderRadius: 4, marginRight: 8 }}>
-                          저장됨
-                        </span>
-                      )}
-                      {tc.source_category && (
-                        <span style={{ background: '#f2f2f2', color: SOURCE_CATEGORY_META[tc.source_category].color, fontSize: 11.5, padding: '3px 10px', borderRadius: 4, marginRight: 8 }}>
-                          {SOURCE_CATEGORY_META[tc.source_category].label}
-                        </span>
-                      )}
-                      {tc.based_on_rule && (
-                        <span style={{ background: '#faf7ff', color: '#a35ec2', fontSize: 11.5, padding: '3px 10px', borderRadius: 4, marginRight: 8, border: '1px solid #e8dff5' }}>
-                          📋 규칙/확정값 반영
-                        </span>
-                      )}
-                      <span style={{ fontSize: 15, fontWeight: 600 }}>{tc.title}</span>
-                    </div>
-                    {tc.based_on_rule && (
-                      <p style={{ fontSize: 12, color: '#a35ec2', margin: '0 0 6px', background: '#faf7ff', border: '1px solid #e8dff5', borderRadius: 4, padding: '6px 10px' }}>
-                        📋 반영된 규칙/확정값: {tc.based_on_rule}
-                      </p>
+                      <span style={{ fontSize: 12, color: '#888', whiteSpace: 'nowrap' }}>
+                        TC {group.entries.length}개 · 선택 {selectedCount}개{savedCount > 0 ? ` · 저장됨 ${savedCount}개` : ''}
+                      </span>
+                    </button>
+                    {isExpanded && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '0 14px 14px' }}>
+                        {group.entries.map(({ tc, idx }) => {
+                          const stepLines = tc.steps.split('\n').filter(Boolean);
+                          const isSaved = savedTcIdx.has(idx);
+                          return (
+                            <div key={idx} style={{ border: '1px solid #eee', borderRadius: 8, padding: '14px 16px', background: isSaved ? '#f7f7f7' : '#fafafa', display: 'flex', gap: 12, opacity: isSaved ? 0.7 : 1 }}>
+                              <input
+                                type="checkbox"
+                                checked={selectedTcIdx.has(idx)}
+                                onChange={() => toggleTc(idx)}
+                                disabled={isSaved}
+                                style={{ marginTop: 4 }}
+                              />
+                              <div style={{ flex: 1 }}>
+                                <div style={{ marginBottom: 12 }}>
+                                  <span style={{ background: '#fdf1e0', color: '#c77700', fontSize: 12, padding: '3px 10px', borderRadius: 4, marginRight: 8 }}>
+                                    {tc.priority}
+                                  </span>
+                                  {isSaved && (
+                                    <span style={{ background: '#eee', color: '#888', fontSize: 12, padding: '3px 10px', borderRadius: 4, marginRight: 8 }}>
+                                      저장됨
+                                    </span>
+                                  )}
+                                  <span style={{ fontSize: 15, fontWeight: 600 }}>{tc.title}</span>
+                                </div>
+                                {tc.based_on_rule && (
+                                  <p style={{ fontSize: 12, color: '#a35ec2', margin: '0 0 6px', background: '#faf7ff', border: '1px solid #e8dff5', borderRadius: 4, padding: '6px 10px' }}>
+                                    📋 반영된 규칙: {tc.based_on_rule}
+                                  </p>
+                                )}
+                                <p style={{ fontSize: 12, color: '#999', margin: '0 0 4px' }}>사전조건</p>
+                                <p style={{ fontSize: 14, color: '#333', margin: '0 0 14px' }}>{tc.precondition}</p>
+                                <p style={{ fontSize: 12, color: '#999', margin: '0 0 4px' }}>테스트 절차</p>
+                                <div style={{ fontSize: 14, color: '#333', margin: '0 0 14px', lineHeight: 1.8 }}>
+                                  {stepLines.map((line, i) => (
+                                    <div key={i}>{line}</div>
+                                  ))}
+                                </div>
+                                <p style={{ fontSize: 12, color: '#999', margin: '0 0 4px' }}>기대 결과</p>
+                                <p style={{ fontSize: 14, color: '#333', margin: 0 }}>{tc.expected_result}</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     )}
-                    {tc.source_snippet && (
-                      <p style={{ fontSize: 12, color: '#888', margin: '0 0 10px', background: '#fafafa', border: '1px solid #eee', borderRadius: 4, padding: '6px 10px' }}>
-                        📎 근거: {tc.source_snippet}
-                      </p>
-                    )}
-                    <p style={{ fontSize: 12, color: '#999', margin: '0 0 4px' }}>사전조건</p>
-                    <p style={{ fontSize: 14, color: '#333', margin: '0 0 14px' }}>{tc.precondition}</p>
-                    <p style={{ fontSize: 12, color: '#999', margin: '0 0 4px' }}>테스트 절차</p>
-                    <div style={{ fontSize: 14, color: '#333', margin: '0 0 14px', lineHeight: 1.8 }}>
-                      {stepLines.map((line, i) => (
-                        <div key={i}>{line}</div>
-                      ))}
-                    </div>
-                    <p style={{ fontSize: 12, color: '#999', margin: '0 0 4px' }}>기대 결과</p>
-                    <p style={{ fontSize: 14, color: '#333', margin: 0 }}>{tc.expected_result}</p>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
           );
         })()}
         </>

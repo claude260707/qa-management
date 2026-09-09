@@ -270,18 +270,13 @@ function parseRequirementChecklistResult(text) {
  * selectedGapLabels: 사용자가 체크박스로 선택한 [LABEL] 값들의 배열
  * 기존 TestCase 타입(title/precondition/steps/expected_result)과 동일한 필드로 반환
  */
-function buildTcGenerationPrompt(selectedGapLabels, extractedRules = [], confirmedIssues = []) {
+function buildTcGenerationPrompt(selectedGapLabels, extractedRules = []) {
   const gapList = selectedGapLabels.map((l) => `- ${l}`).join('\n');
   const rulesBlock = extractedRules.length
     ? extractedRules
         .map((r) => `- 규칙: ${r.summary}\n  위험: ${r.risk}\n  확인할 것: ${r.verify || '(명시 없음)'}`)
         .join('\n')
     : '(추출된 규칙 없음)';
-  const issuesBlock = confirmedIssues.length
-    ? confirmedIssues
-        .map((i) => `- 이슈: ${i.title}\n  질문: ${i.question}\n  확정값: ${i.confirmedValue}`)
-        .join('\n')
-    : '(확정된 정합성 이슈 없음)';
 
   return `위에서 제공된 기획서와 참고 체크리스트를 바탕으로, 다음 누락 항목들에 대한 테스트 케이스를
 각 항목당 정확히 2개씩 설계해줘. 경계값 / 잘못된 입력 / 권한·인증 / 동시성 / 네트워크 장애 /
@@ -301,20 +296,12 @@ function buildTcGenerationPrompt(selectedGapLabels, extractedRules = [], confirm
 참고해서, 그 시나리오를 구체적인 TC로 만들어줘. 이 규칙들은 이 프로젝트에만
 있는 조건이라, 일반적인 서비스라면 없을 예외이니 특히 신경 써줘.
 
-아래 "정합성 검수에서 확정된 값"은 원래 요구사항 문서와 화면설계서가 서로 달라서
-담당자가 최종적으로 확정한 값이야. 이 확정값대로 화면이 실제로 동작하는지 검증하는
-TC도 최소 1개 이상 반드시 만들어줘 (예: 확정값이 "6단계"라면, 실제 화면에 6단계가
-정확히 표시/적용되는지 확인하는 TC).
-
-각 TC마다, 아래 "이 프로젝트만의 규칙" 또는 "정합성 검수에서 확정된 값" 중 이 TC가
-실제로 검증하기 위해 만들어진 것이 있으면 그 요약을 [BASED_ON_RULE]에 그대로 적어줘.
-일반 체크리스트 항목만 보고 만든 TC라 둘 다 무관하면 [BASED_ON_RULE]은 빈 값으로 둬.
+각 TC마다, 아래 "이 프로젝트만의 규칙" 중 이 TC가 실제로 그 규칙을 검증하기 위해
+만들어진 것이 있으면 그 규칙의 요약을 [BASED_ON_RULE]에 그대로 적어줘. 일반
+체크리스트 항목만 보고 만든 TC라 특정 규칙과 무관하면 [BASED_ON_RULE]은 빈 값으로 둬.
 
 --- 이 프로젝트만의 규칙 ---
 ${rulesBlock}
-
---- 정합성 검수에서 확정된 값 ---
-${issuesBlock}
 
 --- 대상 누락 항목 ---
 ${gapList}
@@ -329,7 +316,7 @@ ${gapList}
 - (절차 1)
 - (절차 2)
 [EXPECTED]: (기대 결과)
-[BASED_ON_RULE]: (해당하는 규칙 또는 확정값 요약, 없으면 빈 값)
+[BASED_ON_RULE]: (해당하는 규칙 요약, 없으면 빈 값)
 [TC_END]`;
 }
 

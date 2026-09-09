@@ -179,7 +179,7 @@ router.post('/checklist', async (req, res) => {
 // 3단계: 선택된 누락 항목으로 TC 생성
 router.post('/generate-tc', async (req, res) => {
   try {
-    const { planText, projectType, selectedGapLabels, extractedRules, confirmedIssues } = req.body;
+    const { planText, projectType, selectedGapLabels, extractedRules } = req.body;
     if (!planText || !projectType || !Array.isArray(selectedGapLabels)) {
       return res.status(400).json({
         error: 'planText, projectType, selectedGapLabels(array)가 필요합니다.',
@@ -189,14 +189,7 @@ router.post('/generate-tc', async (req, res) => {
     const skillMd = loadSkillMd(projectType);
     const blocks = [buildPlanTextBlock(planText)];
     if (skillMd) blocks.push(buildSkillMdBlock(skillMd));
-    blocks.push({
-      type: 'text',
-      text: buildTcGenerationPrompt(
-        selectedGapLabels,
-        Array.isArray(extractedRules) ? extractedRules : [],
-        Array.isArray(confirmedIssues) ? confirmedIssues : []
-      ),
-    });
+    blocks.push({ type: 'text', text: buildTcGenerationPrompt(selectedGapLabels, Array.isArray(extractedRules) ? extractedRules : []) });
     const raw = await callClaude(blocks, { maxTokens: 8000, label: 'generate-tc' });
     const testCases = parseTcGenerationResult(raw);
     let warning;
