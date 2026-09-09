@@ -84,6 +84,27 @@ function normalizeForMatch(s) {
   return (s || '').replace(/\s+/g, '').toLowerCase();
 }
 
+// AI가 "그대로 인용"하라고 해도 PPTX/문서 원문을 한 글자도 안 틀리고 베끼는 경우는 드물다
+// (띄어쓰기·조사 등 사소한 차이가 흔함). 완전 일치만 요구하면 실제로 문서에 있는 내용까지
+// 대량으로 걸러지므로, 일정 비율 이상 겹치면 "원문에 실제로 있다"고 인정한다.
+// 반대로 아예 다른 화면/기능을 지어낸 경우는 겹치는 조각이 거의 없어 이 기준을 통과하지 못한다.
+function isEvidenceGrounded(evidence, normalizedPlanText) {
+  const ev = normalizeForMatch(evidence);
+  if (ev.length < 6) return false; // 너무 짧으면 판단 근거로 신뢰하기 어려움
+  if (normalizedPlanText.includes(ev)) return true; // 완전 일치 - 가장 확실한 케이스
+
+  const WINDOW = 10;
+  const STRIDE = 5;
+  let windows = 0;
+  let hits = 0;
+  for (let i = 0; i + WINDOW <= ev.length; i += STRIDE) {
+    windows++;
+    if (normalizedPlanText.includes(ev.slice(i, i + WINDOW))) hits++;
+  }
+  if (windows === 0) return false; // WINDOW보다 짧은데 완전 일치도 아니었던 경우
+  return hits / windows >= 0.6; // 60% 이상 겹치면 원문 근거가 있다고 판단
+}
+
 router.post('/extract-features', async (req, res) => {
   try {
     const { planText } = req.body;
@@ -93,13 +114,8 @@ router.post('/extract-features', async (req, res) => {
     const raw = await callClaude(blocks, { label: 'extract-features' });
     const parsed = parseFeatureExtractionResult(raw);
 
-    // AI가 "근거"라고 적은 인용문을 그대로 믿지 않고, 실제로 원본 문서 안에 그 문구가
-    // 있는지 코드로 직접 대조한다. 못 찾으면 인용문까지 지어낸 것이므로 통째로 제외.
     const normalizedPlanText = normalizeForMatch(planText);
-    const features = parsed.filter((f) => {
-      const normalizedEvidence = normalizeForMatch(f.evidence);
-      return normalizedEvidence.length > 0 && normalizedPlanText.includes(normalizedEvidence);
-    });
+    const features = parsed.filter((f) => isEvidenceGrounded(f.evidence, normalizedPlanText));
     const droppedCount = parsed.length - features.length;
 
     res.json({ features, droppedCount });
