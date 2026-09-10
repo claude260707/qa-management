@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { Chart, registerables } from 'chart.js';
 import { dailyReportApi, projectsApi } from './api';
 import type { DailyReportResponse, DailyReportDetail } from './api';
@@ -44,6 +45,9 @@ export default function DailyReportScreen({ projectId }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [advancing, setAdvancing] = useState(false);
+  const [tcStatusFilter, setTcStatusFilter] = useState<'all' | 'fail' | 'not_run' | 'blocked'>('all');
+  const [tcSearchText, setTcSearchText] = useState('');
+  const [showPassedTc, setShowPassedTc] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<Chart | null>(null);
 
@@ -205,62 +209,133 @@ export default function DailyReportScreen({ projectId }: Props) {
           </div>
 
           <p className="daily-report-table-title">TC별 결과 (차수 비교)</p>
-          <div className="daily-report-table-wrap" style={{ overflowX: 'auto' }}>
-            <table className="daily-report-table" style={{ borderCollapse: 'collapse', width: '100%', fontSize: 13 }}>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: 'left', padding: '8px 10px', borderBottom: '2px solid #ddd', minWidth: 220 }}>TC</th>
-                  {detail.rounds.map((round) => (
-                    <th key={round} style={{ textAlign: 'center', padding: '8px 10px', borderBottom: '2px solid #ddd', width: 70 }}>{round}차</th>
-                  ))}
-                  <th style={{ textAlign: 'left', padding: '8px 10px', borderBottom: '2px solid #ddd', maxWidth: 260 }}>사유</th>
-                </tr>
-              </thead>
-              <tbody>
-                {detail.testCases.map((tc) => (
-                  <tr key={tc.id}>
-                    <td style={{ padding: '8px 10px', borderBottom: '1px solid #eee', verticalAlign: 'top' }}>{tc.title}</td>
-                    {detail.rounds.map((round) => {
-                      const status = tc.byRound[round];
-                      return (
-                        <td
-                          key={round}
-                          className={`tc-status-cell tc-status-${status ?? ''}`}
-                          style={{
-                            padding: '8px 10px',
-                            borderBottom: '1px solid #eee',
-                            textAlign: 'center',
-                            verticalAlign: 'top',
-                            background: status ? STATUS_BG[status] : undefined,
-                            color: status ? STATUS_COLOR[status] : '#bbb',
-                            fontWeight: status === 'fail' ? 600 : 400,
-                          }}
-                        >
-                          {status ? STATUS_LABEL[status] ?? status : '-'}
-                        </td>
-                      );
-                    })}
-                    <td
-                      className="daily-report-note-cell"
-                      title={tc.latestNote ?? ''}
-                      style={{
-                        padding: '8px 10px',
-                        borderBottom: '1px solid #eee',
-                        verticalAlign: 'top',
-                        maxWidth: 260,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        color: '#666',
-                      }}
-                    >
-                      {tc.latestNote ?? '-'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+
+          {(() => {
+            const rounds = detail.rounds;
+            const getLatestStatus = (tc: (typeof detail.testCases)[number]) => {
+              for (let i = rounds.length - 1; i >= 0; i--) {
+                const st = tc.byRound[rounds[i]];
+                if (st) return st;
+              }
+              return undefined;
+            };
+
+            const searched = detail.testCases.filter(
+              (tc) => !tcSearchText.trim() || tc.title.toLowerCase().includes(tcSearchText.trim().toLowerCase())
+            );
+
+            let visible = searched;
+            let passedCount = 0;
+            if (tcStatusFilter !== 'all') {
+              visible = searched.filter((tc) => getLatestStatus(tc) === tcStatusFilter);
+            } else {
+              const passed = searched.filter((tc) => getLatestStatus(tc) === 'pass');
+              passedCount = passed.length;
+              visible = showPassedTc ? searched : searched.filter((tc) => getLatestStatus(tc) !== 'pass');
+            }
+
+            const filterBtnStyle = (active: boolean): CSSProperties => ({
+              padding: '5px 12px',
+              fontSize: 12.5,
+              borderRadius: 6,
+              border: active ? '1px solid #2a78d6' : '1px solid #ddd',
+              background: active ? '#eaf2fc' : '#fff',
+              color: active ? '#2a78d6' : '#555',
+              fontWeight: active ? 600 : 400,
+              cursor: 'pointer',
+            });
+
+            return (
+              <>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', margin: '10px 0' }}>
+                  <button style={filterBtnStyle(tcStatusFilter === 'all')} onClick={() => setTcStatusFilter('all')}>전체</button>
+                  <button style={filterBtnStyle(tcStatusFilter === 'fail')} onClick={() => setTcStatusFilter('fail')}>Fail만</button>
+                  <button style={filterBtnStyle(tcStatusFilter === 'not_run')} onClick={() => setTcStatusFilter('not_run')}>미진행만</button>
+                  <button style={filterBtnStyle(tcStatusFilter === 'blocked')} onClick={() => setTcStatusFilter('blocked')}>Blocked만</button>
+                  <input
+                    type="text"
+                    value={tcSearchText}
+                    onChange={(e) => setTcSearchText(e.target.value)}
+                    placeholder="TC 제목 검색"
+                    style={{ marginLeft: 'auto', padding: '6px 10px', fontSize: 13, border: '1px solid #ddd', borderRadius: 6, minWidth: 200 }}
+                  />
+                </div>
+
+                <div className="daily-report-table-wrap" style={{ overflowX: 'auto' }}>
+                  <table className="daily-report-table" style={{ borderCollapse: 'collapse', width: '100%', fontSize: 13 }}>
+                    <thead>
+                      <tr>
+                        <th style={{ textAlign: 'left', padding: '8px 10px', borderBottom: '2px solid #ddd', minWidth: 220 }}>TC</th>
+                        {rounds.map((round) => (
+                          <th key={round} style={{ textAlign: 'center', padding: '8px 10px', borderBottom: '2px solid #ddd', width: 70 }}>{round}차</th>
+                        ))}
+                        <th style={{ textAlign: 'left', padding: '8px 10px', borderBottom: '2px solid #ddd', maxWidth: 260 }}>사유</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visible.length === 0 && (
+                        <tr>
+                          <td colSpan={rounds.length + 2} style={{ padding: '16px 10px', textAlign: 'center', color: '#999' }}>
+                            해당하는 TC가 없습니다.
+                          </td>
+                        </tr>
+                      )}
+                      {visible.map((tc) => (
+                        <tr key={tc.id}>
+                          <td style={{ padding: '8px 10px', borderBottom: '1px solid #eee', verticalAlign: 'top' }}>{tc.title}</td>
+                          {rounds.map((round) => {
+                            const status = tc.byRound[round];
+                            return (
+                              <td
+                                key={round}
+                                className={`tc-status-cell tc-status-${status ?? ''}`}
+                                style={{
+                                  padding: '8px 10px',
+                                  borderBottom: '1px solid #eee',
+                                  textAlign: 'center',
+                                  verticalAlign: 'top',
+                                  background: status ? STATUS_BG[status] : undefined,
+                                  color: status ? STATUS_COLOR[status] : '#bbb',
+                                  fontWeight: status === 'fail' ? 600 : 400,
+                                }}
+                              >
+                                {status ? STATUS_LABEL[status] ?? status : '-'}
+                              </td>
+                            );
+                          })}
+                          <td
+                            className="daily-report-note-cell"
+                            title={tc.latestNote ?? ''}
+                            style={{
+                              padding: '8px 10px',
+                              borderBottom: '1px solid #eee',
+                              verticalAlign: 'top',
+                              maxWidth: 260,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              color: '#666',
+                            }}
+                          >
+                            {tc.latestNote ?? '-'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {tcStatusFilter === 'all' && passedCount > 0 && (
+                  <button
+                    onClick={() => setShowPassedTc((v) => !v)}
+                    style={{ marginTop: 10, fontSize: 12.5, color: '#2a8f4d', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                  >
+                    {showPassedTc ? '▲ 정상 통과 TC 접기' : `✓ 정상 통과 ${passedCount}건 더 보기 ▾`}
+                  </button>
+                )}
+              </>
+            );
+          })()}
         </>
       )}
     </div>
