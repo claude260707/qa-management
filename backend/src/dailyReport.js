@@ -25,12 +25,35 @@ async function getSnapshot(projectId, round, cutoff) {
   return result.rows;
 }
 
+// getSnapshot은 "그 차수/시점까지 실행 이력이 있는 TC"만 돌려주기 때문에, 한 번도
+// 실행된 적 없는 TC는 아예 빠져서 "전체 TC" 개수가 실제 등록된 TC 수보다 작게 나오는
+// 문제가 있었다. 프로젝트에 등록된 전체 TC id를 기준으로, 이력이 없는 TC는
+// status: 'not_run'으로 채워 넣어 항상 "전체 TC = 등록된 TC 수"가 되도록 한다.
+async function getFullSnapshot(projectId, round, cutoff) {
+  const [historyRows, allTcResult] = await Promise.all([
+    getSnapshot(projectId, round, cutoff),
+    pool.query('SELECT id FROM test_cases WHERE project_id = $1', [projectId]),
+  ]);
+  const byId = new Map(historyRows.map((r) => [r.test_case_id, r]));
+  return allTcResult.rows.map((tc) => byId.get(tc.id) || {
+    test_case_id: tc.id,
+    status: 'not_run',
+    executed_by: null,
+    executed_at: null,
+    status_note: null,
+  });
+}
+
 function summarize(rows) {
   const summary = { total: rows.length, by_status: {}, by_executor: { automated: {}, manual: {} } };
   for (const row of rows) {
     summary.by_status[row.status] = (summary.by_status[row.status] || 0) + 1;
-    const bucket = row.executed_by === 'playwright' ? 'automated' : 'manual';
-    summary.by_executor[bucket][row.status] = (summary.by_executor[bucket][row.status] || 0) + 1;
+    // executed_by가 없는 건(한 번도 실행 안 한 TC) 자동/수동 어느 쪽에도 안 들어가야 함 -
+    // 예전엔 이게 무조건 '수동'으로 잘못 집계됐음.
+    if (row.executed_by) {
+      const bucket = row.executed_by === 'playwright' ? 'automated' : 'manual';
+      summary.by_executor[bucket][row.status] = (summary.by_executor[bucket][row.status] || 0) + 1;
+    }
   }
   return summary;
 }
@@ -71,8 +94,8 @@ router.get('/', async (req, res) => {
     yesterdayCutoff.setDate(yesterdayCutoff.getDate() - 1);
 
     const [todayRows, yesterdayRows] = await Promise.all([
-      getSnapshot(project_id, currentRound, todayCutoff),
-      getSnapshot(project_id, currentRound, yesterdayCutoff),
+      getFullSnapshot(project_id, currentRound, todayCutoff),
+      getFullSnapshot(project_id, currentRound, yesterdayCutoff),
     ]);
 
     res.json({
@@ -109,7 +132,7 @@ router.get('/detail', async (req, res) => {
     const now = new Date();
     const perRoundRows = {};
     for (const round of rounds) {
-      perRoundRows[round] = await getSnapshot(project_id, round, now);
+      perRoundRows[round] = await getFullSnapshot(project_id, round, now);
     }
 
     const roundSummary = {};
@@ -177,8 +200,8 @@ router.get('/export', async (req, res) => {
     yesterdayCutoff.setDate(yesterdayCutoff.getDate() - 1);
 
     const [todayRows, yesterdayRows] = await Promise.all([
-      getSnapshot(project_id, currentRound, todayCutoff),
-      getSnapshot(project_id, currentRound, yesterdayCutoff),
+      getFullSnapshot(project_id, currentRound, todayCutoff),
+      getFullSnapshot(project_id, currentRound, yesterdayCutoff),
     ]);
     const todaySummary = summarize(todayRows);
     const yesterdaySummary = summarize(yesterdayRows);
@@ -194,7 +217,7 @@ router.get('/export', async (req, res) => {
     const now = new Date();
     const perRoundRows = {};
     for (const r of rounds) {
-      perRoundRows[r] = await getSnapshot(project_id, r, now);
+      perRoundRows[r] = await getFullSnapshot(project_id, r, now);
     }
     const roundSummary = {};
     for (const r of rounds) {

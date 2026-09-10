@@ -45,7 +45,7 @@ export default function DailyReportScreen({ projectId }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [advancing, setAdvancing] = useState(false);
-  const [tcStatusFilter, setTcStatusFilter] = useState<'all' | 'fail' | 'not_run' | 'blocked'>('all');
+  const [tcStatusFilter, setTcStatusFilter] = useState<'all' | 'fail' | 'not_run' | 'blocked' | 'n_a' | 'n_t'>('all');
   const [tcSearchText, setTcSearchText] = useState('');
   const [showPassedTc, setShowPassedTc] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -252,6 +252,8 @@ export default function DailyReportScreen({ projectId }: Props) {
                   <button style={filterBtnStyle(tcStatusFilter === 'fail')} onClick={() => setTcStatusFilter('fail')}>Fail만</button>
                   <button style={filterBtnStyle(tcStatusFilter === 'not_run')} onClick={() => setTcStatusFilter('not_run')}>미진행만</button>
                   <button style={filterBtnStyle(tcStatusFilter === 'blocked')} onClick={() => setTcStatusFilter('blocked')}>Blocked만</button>
+                  <button style={filterBtnStyle(tcStatusFilter === 'n_a')} onClick={() => setTcStatusFilter('n_a')}>N/A만</button>
+                  <button style={filterBtnStyle(tcStatusFilter === 'n_t')} onClick={() => setTcStatusFilter('n_t')}>N/T만</button>
                   <input
                     type="text"
                     value={tcSearchText}
