@@ -8,8 +8,10 @@ import './Sidebar.css';
 interface SidebarProps {
   activeProjectId: number | null;
   isListActive: boolean;
+  isBugsActive: boolean;
   onSelectProject: (id: number) => void;
   onOpenProjectList: () => void;
+  onOpenBugs: () => void;
   refreshSignal: number;
   // 프로젝트 하위 폴더(기획 자료 분석 > ①~⑤ / Test Case) 트리 동기화용
   activeDetailTab?: 'planAnalysis' | 'testcases';
@@ -19,7 +21,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({
-  activeProjectId, isListActive, onSelectProject, onOpenProjectList, refreshSignal,
+  activeProjectId, isListActive, isBugsActive, onSelectProject, onOpenProjectList, onOpenBugs, refreshSignal,
   activeDetailTab, activePlanStep, onSelectPlanStep, onSelectTestCaseTab,
 }: SidebarProps) {
   const [expanded, setExpanded] = useState(true);
@@ -176,6 +178,17 @@ export default function Sidebar({
             })}
           </div>
         )}
+
+        <div className="sidebar-accordion-header">
+          <span className="sidebar-accordion-chevron" style={{ visibility: 'hidden' }}>▾</span>
+          <button
+            className={`sidebar-item sidebar-accordion-label ${isBugsActive ? 'is-active' : ''}`}
+            onClick={onOpenBugs}
+          >
+            <span className="sidebar-item-icon">🐞</span>
+            <span>Bug 관리</span>
+          </button>
+        </div>
       </nav>
 
       <div className="sidebar-footer">

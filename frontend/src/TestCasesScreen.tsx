@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Project, Requirement, TestCase, TestCaseInput, TestCaseBulkItem, TestCaseStatus, Attachment } from './types';
+import type { Project, Requirement, TestCase, TestCaseInput, TestCaseBulkItem, TestCaseStatus, Attachment, BugInput } from './types';
 
 import { REQ_PRIORITY_LABEL, TC_STATUS_LABEL, STATUS_LABEL } from './types';
-import { projectsApi, requirementsApi, testCasesApi, attachmentsApi } from './api';
+import { projectsApi, requirementsApi, testCasesApi, attachmentsApi, bugsApi } from './api';
 import TestCaseModal from './TestCaseModal';
 import RequirementModal from './RequirementModal';
 import TestCaseBulkUploadModal from './TestCaseBulkUploadModal';
+import BugModal from './BugModal';
 import DailyReportScreen from './DailyReportScreen';
 import './TestCasesScreen.css';
 
@@ -62,6 +63,7 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
   const [viewingTc, setViewingTc] = useState<TestCase | null>(null);
   const [viewingRequirement, setViewingRequirement] = useState<Requirement | null>(null);
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
+  const [bugModalTc, setBugModalTc] = useState<TestCase | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [batchPasteOpen, setBatchPasteOpen] = useState(false);
   const [batchPasteText, setBatchPasteText] = useState('');
@@ -196,6 +198,11 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
     if (!confirm(`"${tc.title}" Test Case를 삭제할까요? 되돌릴 수 없습니다.`)) return;
     await testCasesApi.remove(tc.id);
     await load();
+  }
+
+  async function handleCreateBug(input: BugInput) {
+    await bugsApi.create(input);
+    setBugModalTc(null);
   }
 
   async function handleBulkImport(items: TestCaseBulkItem[]) {
@@ -423,6 +430,7 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
     <span className={`tc-status-pill tc-status-${tc.status}`}>{TC_STATUS_LABEL[tc.status]}</span>
     <h3 className="tc-row-title">{tc.title}</h3>
     <div className="tc-row-actions" onClick={(e) => e.stopPropagation()}>
+      <button onClick={() => setBugModalTc(tc)} title="이 TC로 버그 등록">🐞</button>
       <button onClick={() => { setEditing(tc); setModalOpen(true); }} title="수정">✏️</button>
       <button onClick={() => handleDelete(tc)} title="삭제">✕</button>
     </div>
@@ -441,6 +449,17 @@ export default function TestCasesScreen({ embeddedProjectId }: { embeddedProject
           onAttachmentAdded={refreshAttachments}
           onClose={() => { setModalOpen(false); setEditing(null); }}
           onSubmit={handleSubmit}
+        />
+      )}
+
+      {bugModalTc && projectId && (
+        <BugModal
+          initial={null}
+          projects={projects}
+          defaultProjectId={projectId}
+          prefillFromTestCase={bugModalTc}
+          onClose={() => setBugModalTc(null)}
+          onSubmit={handleCreateBug}
         />
       )}
 
