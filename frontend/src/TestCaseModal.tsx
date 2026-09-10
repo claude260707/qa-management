@@ -159,7 +159,7 @@ async function handleCopyAiPrompt() {
     setUploadBusy(true);
     setUploadError(null);
     try {
-      const uploaded = await attachmentsApi.upload(fileList[0], projectId, '익명', requirementId);
+      const uploaded = await attachmentsApi.upload(fileList[0], projectId, tester.trim() || '익명', requirementId);
       await onAttachmentAdded();
       setAttachmentId(uploaded.id);
       setShowUploadBox(false);
@@ -184,7 +184,7 @@ async function handleCopyAiPrompt() {
         requirement_id: requirementId,
         title: newLinkTitle.trim(),
         url: newLinkUrl.trim(),
-        uploader: '익명',
+        uploader: tester.trim() || '익명',
       });
       await onAttachmentAdded();
       setAttachmentId(created.id);
@@ -333,9 +333,9 @@ if ((status === 'fail' || status === 'blocked') && !statusNote.trim()) {
             </label>
           </div>
 
-{(status === 'fail' || status === 'blocked' || status === 'n_a') && (
+{(status === 'fail' || status === 'blocked' || status === 'n_a' || status === 'n_t') && (
   <label className="field">
-    <span>사유{status !== 'n_a' && ' *'}</span>
+    <span>사유{(status === 'fail' || status === 'blocked') && ' *'}</span>
     <textarea
       value={statusNote}
       onChange={(e) => setStatusNote(e.target.value)}
