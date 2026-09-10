@@ -154,18 +154,18 @@ export default function DailyReportScreen({ projectId }: Props) {
         </div>
       </div>
 
-      <div className="daily-report-kpis">
-        <div className="kpi-card">
-          <span className="kpi-label">전체 TC</span>
-          <span className="kpi-value">{todayTotal}</span>
+      <div className="daily-report-kpis" style={{ display: 'flex', gap: 16, marginBottom: 8 }}>
+        <div className="kpi-card" style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '10px 16px', border: '1px solid #eee', borderRadius: 8, flex: 1 }}>
+          <span className="kpi-label" style={{ fontSize: 12, color: '#888' }}>전체 TC</span>
+          <span className="kpi-value" style={{ fontSize: 20, fontWeight: 700 }}>{todayTotal}</span>
         </div>
-        <div className="kpi-card">
-          <span className="kpi-label">통과율</span>
-          <span className="kpi-value">{passRate}%</span>
+        <div className="kpi-card" style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '10px 16px', border: '1px solid #eee', borderRadius: 8, flex: 1 }}>
+          <span className="kpi-label" style={{ fontSize: 12, color: '#888' }}>통과율</span>
+          <span className="kpi-value" style={{ fontSize: 20, fontWeight: 700 }}>{passRate}%</span>
         </div>
-        <div className="kpi-card">
-          <span className="kpi-label">어제 대비 통과</span>
-          <span className="kpi-value" style={{ color: delta >= 0 ? 'var(--tc-status-pass, green)' : 'var(--tc-status-fail, red)' }}>
+        <div className="kpi-card" style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '10px 16px', border: '1px solid #eee', borderRadius: 8, flex: 1 }}>
+          <span className="kpi-label" style={{ fontSize: 12, color: '#888' }}>어제 대비 통과</span>
+          <span className="kpi-value" style={{ fontSize: 20, fontWeight: 700, color: delta >= 0 ? 'var(--tc-status-pass, green)' : 'var(--tc-status-fail, red)' }}>
             {delta >= 0 ? `+${delta}` : delta}
           </span>
         </div>
