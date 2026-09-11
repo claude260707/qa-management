@@ -5,6 +5,9 @@ import { PLAN_ANALYSIS_TAB_CONFIG } from './PlanAnalysisScreen';
 import type { PlanAnalysisTab } from './PlanAnalysisScreen';
 import './Sidebar.css';
 
+// Bug 관리 기능 구현 여부에 대한 팀 내부 승인 전까지 임시 숨김 처리 (승인 후 true로 변경)
+const SHOW_BUG_MENU = false;
+
 interface SidebarProps {
   activeProjectId: number | null;
   isListActive: boolean;
@@ -179,16 +182,18 @@ export default function Sidebar({
           </div>
         )}
 
-        <div className="sidebar-accordion-header">
-          <span className="sidebar-accordion-chevron" style={{ visibility: 'hidden' }}>▾</span>
-          <button
-            className={`sidebar-item sidebar-accordion-label ${isBugsActive ? 'is-active' : ''}`}
-            onClick={onOpenBugs}
-          >
-            <span className="sidebar-item-icon">🐞</span>
-            <span>Bug 관리</span>
-          </button>
-        </div>
+        {SHOW_BUG_MENU && (
+          <div className="sidebar-accordion-header">
+            <span className="sidebar-accordion-chevron" style={{ visibility: 'hidden' }}>▾</span>
+            <button
+              className={`sidebar-item sidebar-accordion-label ${isBugsActive ? 'is-active' : ''}`}
+              onClick={onOpenBugs}
+            >
+              <span className="sidebar-item-icon">🐞</span>
+              <span>Bug 관리</span>
+            </button>
+          </div>
+        )}
       </nav>
 
       <div className="sidebar-footer">
