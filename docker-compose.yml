@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: qa
@@ -9,7 +9,8 @@ services:
       TZ: Asia/Seoul
       PGTZ: Asia/Seoul
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # postgres 18+ 이미지는 PGDATA가 /var/lib/postgresql/18/docker 이므로 상위 디렉토리를 마운트
+      - pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U qa -d qa_management"]
       interval: 5s
