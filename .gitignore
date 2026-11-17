@@ -6,3 +6,6 @@ build/
 *.log
 # Claude Code config
 .claude/
+frontend/test-results/
+backup.sql
+restore_log.txt

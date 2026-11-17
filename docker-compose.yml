@@ -1,0 +1,51 @@
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: qa
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: qa_management
+      TZ: Asia/Seoul
+      PGTZ: Asia/Seoul
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qa -d qa_management"]
+      interval: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # DATABASE_URL을 비워야 db.js가 SSL 없는 개별 변수 방식으로 접속함
+      DATABASE_URL: ""
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USER: qa
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: qa_management
+      PORT: 4000
+      TZ: Asia/Seoul
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: /api
+    restart: unless-stopped
+    ports:
+      - "8000:80"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
+  uploads:
