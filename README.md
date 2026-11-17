@@ -85,6 +85,8 @@ npm run dev
 # → http://localhost:5173 접속
 ```
 
+서버 배포(업데이트): 서버에서 `cd ~/qa-management && ./deploy.sh` 실행
+
 ## Slack 알림 설정 (선택)
 
 요구사항 상태가 **승인 / 반려 / 구현완료**로 바뀔 때 Slack으로 자동 알림을 보낼 수 있습니다. (Slack 무료 기능, 별도 API 비용 없음)
