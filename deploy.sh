@@ -33,6 +33,8 @@ echo "/api/health 확인 중 (최대 30초)..."
 for i in $(seq 1 15); do
   if body=$(curl -fsS "http://localhost:${PORT}/api/health" 2>/dev/null); then
     echo "OK: ${body}"
+    step "이전 빌드로 생긴 dangling 이미지 정리"
+    docker image prune -f
     echo
     echo "배포 완료: $(git log --oneline -1)"
     exit 0
